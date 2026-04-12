@@ -5,30 +5,27 @@ from typing import Any, Sequence
 
 from playwright.async_api import Page
 
-from camouchat.contracts.chat import ChatProtocol
-from camouchat.WhatsApp.api.models import ChatModelAPI
-from camouchat.WhatsApp.api.wa_js import WapiWrapper, WAJS_Scripts
-from camouchat.contracts.chat_processor import ChatProcessorProtocol
-from camouchat.camouchat_logger import camouchatLogger
+from camouchat_core import ChatProtocol ,ChatProcessorProtocol
+from camouchat_whatsapp.api.models import ChatModelAPI
+from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
 
+# todo , Add Auto logger later
 
-class ChatApiManager(ChatProcessorProtocol):
+class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
     def __init__(
         self, page: Page, bridge: WapiWrapper, logger: Logger | LoggerAdapter | None = None
     ) -> None:
         self.page = page
         self.ui_config = None
-        self.log = logger or camouchatLogger
+        self.log = logger
         self._bridge = bridge
         self._last_opened_chat_id: str | None = None
 
     async def fetch_chats(self, **kwargs) -> Sequence[ChatProtocol]:
+        # Todo , add all the params into it & add docstring
         return await self.get_chat_list(**kwargs)  # type: ignore[return-value]
 
-    async def _click_chat(self, chat: ChatProtocol | None = None, **kwargs) -> bool:  # type: ignore[override]
-        return await self.open_chat(chat=chat)  # type: ignore
-
-    async def open_chat(self, chat: ChatModelAPI) -> bool:
+    async def open_chat(self, chat: ChatProtocol) -> bool:
         """
         Opens the chat using a Stealth Hybrid approach.
         1. Tries to find the chat physically on the screen and injects human CDP mouse clicks.
@@ -110,7 +107,7 @@ class ChatApiManager(ChatProcessorProtocol):
     # RAM BASED METHODS
     # ──────────────────────────────────────────────
 
-    async def get_chat_by_id(self, chat_id: str) -> ChatModelAPI:
+    async def get_chat_by_id(self, chat_id: str) -> ChatProtocol:
         """
         [Type: RAM]
         Fetch all the scalar data from React memory structured via ChatModelAPI.
@@ -138,7 +135,7 @@ class ChatApiManager(ChatProcessorProtocol):
         with_labels: list | None = None,
         anchor_chat_id: str | None = None,
         ignore_group_metadata: bool = True,
-    ) -> list[ChatModelAPI]:
+    ) -> Sequence[ChatProtocol]:
         """
         [Type: RAM]
         Fetch a list of chats from ChatStore in sidebar order directly from React memory.
@@ -182,7 +179,7 @@ class ChatApiManager(ChatProcessorProtocol):
 
     async def mark_is_read(self, chat_id: str) -> Any:
         """
-        [Type: NETWORK]
+        [Type: NETWORK] -- Only for Experimental bases.
         Force-mark a chat as read. Sends a network read-receipt to WhatsApp servers.
         Only call when using Tier 3 pure API mode.
 

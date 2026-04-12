@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 from playwright.async_api import ElementHandle, Locator
-from camouchat.contracts.message import MessageProtocol
+from camouchat_core import MessageProtocol
 
 
 @dataclass

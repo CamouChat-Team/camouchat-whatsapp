@@ -14,7 +14,7 @@ from typing import Union, Optional
 from playwright.async_api import ElementHandle, Locator, Page
 
 from camouchat_core import WebUISelectorCapable
-from camouchat_whatsapp.logger import camouchatLogger
+# from camouchat_whatsapp.logger import
 
 
 class WebSelectorConfig(WebUISelectorCapable):
@@ -22,7 +22,7 @@ class WebSelectorConfig(WebUISelectorCapable):
 
     def __init__(self, page: Page, log: Optional[Union[Logger, LoggerAdapter]] = None) -> None:
         self.page = page
-        self.log = log or camouchatLogger
+        self.log = log
         if self.page is None:
             raise ValueError("page must not be None")
 

@@ -4,62 +4,11 @@ WhatsApp Exception Hierarchy.
 This module defines the structured exception system used by the WhatsApp
 automation layer of the project. All errors raised during WhatsApp operations
 inherit from `WhatsAppError`, which itself extends the global project error
-base `camouchatError`.
+base `CamouChatError`.
 
-Purpose
--------
-The hierarchy provides:
-- Clear separation of failure domains (chat, message, login, media, reply).
-- Consistent error handling across automation layers.
-- Easier debugging and targeted exception catching.
-- Structured propagation of errors from low-level UI operations to higher
-  orchestration layers.
-
-Hierarchy Overview
-------------------
-
-camouchatError
-└── WhatsAppError
-    ├── ChatError
-    │   ├── ChatClickError
-    │   ├── ChatNotFoundError
-    │   ├── ChatListEmptyError
-    │   ├── ChatProcessorError
-    │   ├── ChatUnreadError
-    │   │   └── ChatMenuError
-    │
-    ├── MessageError
-    │   ├── MessageNotFoundError
-    │   ├── MessageListEmptyError
-    │   └── MessageProcessorError
-    │
-    ├── LoginError
-    │
-    ├── InteractionControllerError
-    │
-    └── MediaCapableError
-        └── MenuError
-
-Design Notes
-------------
-- Base classes represent logical subsystems of WhatsApp functionality.
-- Specific exceptions represent concrete UI or automation failures.
-- Subclassing allows higher-level code to catch either granular or grouped
-  error categories depending on the context.
-
-Example Usage
--------------
-try:
-    chat.open()
-except ChatNotFoundError:
-    handle_missing_chat()
-except ChatError:
-    handle_generic_chat_issue()
-except WhatsAppError:
-    handle_general_whatsapp_failure()
 """
 
-from camouchat.Exceptions.base import CamouChatError
+from camouchat_core import CamouChatError
 
 
 class WhatsAppError(CamouChatError):

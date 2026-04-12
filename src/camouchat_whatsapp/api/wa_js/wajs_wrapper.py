@@ -10,9 +10,9 @@ from typing import Any, Dict, List, Optional, Union
 
 from playwright.async_api import Page
 
-from camouchat.camouchat_logger import camouchatLogger
+# Todo , add logger later
 from .wajs_scripts import WAJS_Scripts
-from camouchat.Exceptions.whatsapp import WAJSError
+from camouchat_whatsapp.exceptions import WAJSError
 
 
 class WapiWrapper:
@@ -135,7 +135,7 @@ class WapiWrapper:
         while (time.time() - start) * 1000 < timeout_ms:
             try:
                 if not injected:
-                    has_global = await self.page.evaluate("mw:typeof window.WPP !== 'undefined'")
+                    has_global = await self.page.evaluate("typeof window.WPP !== 'undefined'")
                     if not has_global:
                         try:
                             await self.page.evaluate(
@@ -158,7 +158,7 @@ class WapiWrapper:
 
                 if injected:
                     is_ready = await self.page.evaluate(
-                        "mw:window.WPP && window.WPP.isReady === true"
+                        "window.WPP && window.WPP.isReady === true"
                     )
                     if is_ready:
                         # Hide WPP under a non-enumerable, non-configurable,
@@ -166,7 +166,7 @@ class WapiWrapper:
                         #   - Object.keys(window)   → WPP invisible
                         #   - Object.defineProperty  → cannot redefine
                         #   - window.__react_devtools_hook = null → rejected
-                        await self.page.evaluate("""mw:(() => {
+                        await self.page.evaluate("""(() => {
                             Object.defineProperty(window, "__react_devtools_hook", {
                                 value: window.WPP,
                                 enumerable: false,
@@ -178,11 +178,11 @@ class WapiWrapper:
 
                         # Confirm WPP is gone from enumerable keys and
                         # the hidden handle is alive and non-null.
-                        sweep_ok = await self.page.evaluate("""mw:(() => {
+                        sweep_ok = await self.page.evaluate("""(() => {
                             const keys = Object.keys(window);
-                            const wppGone  = !keys.includes('WPP');
+                            const wppGone = !keys.includes('WPP');
                             const handleOk = typeof window.__react_devtools_hook === 'object'
-                                             && window.__react_devtools_hook !== null;
+                                && window.__react_devtools_hook !== null;
                             return wppGone && handleOk;
                         })()""")
 
@@ -250,7 +250,7 @@ class WapiWrapper:
         self._queue_key = queue_key  # stored so poll_message_queue can use it
 
         # Define hidden queue + guard in Main World — non-enumerable so scanners can't see them.
-        await self.page.evaluate(f"""mw:(() => {{
+        await self.page.evaluate(f"""(() => {{
             Object.defineProperty(window, '{queue_key}', {{
                 value: [],
                 writable: true,
@@ -266,7 +266,7 @@ class WapiWrapper:
         }})()""")
 
         # Register wpp.on listener — entirely in Main World via mw:.
-        await self.page.evaluate(f"""mw:(async () => {{
+        await self.page.evaluate(f"""(async () => {{
             const wpp = window.__react_devtools_hook;
             if (!wpp) {{
                 console.warn('CamouBridge: WPP handle missing.');
@@ -301,7 +301,7 @@ class WapiWrapper:
         try:
             qk = self._queue_key
             ids = await self.page.evaluate(
-                f"mw:(() => {{ const q = window['{qk}'] || []; "
+                f"(() => {{ const q = window['{qk}'] || []; "
                 f"window['{qk}'] = []; return q; }})()"
             )
             return ids or []
@@ -356,7 +356,7 @@ class WapiWrapper:
         # Clear hidden properties via mw: — they're non-configurable so we just empty the queue.
         qk = getattr(self, "_queue_key", None)
         if qk:
-            await self.page.evaluate(f"mw:window['{qk}'] = []")
+            await self.page.evaluate(f"window['{qk}'] = []")
 
         self._bridge_active = False
         self._bridge_key = None
@@ -481,7 +481,7 @@ class WapiWrapper:
             safe_msg = json.dumps(message)
             safe_options = json.dumps(options or {"waitForAck": False})
             await self.page.evaluate(
-                f"mw:(() => {{"
+                f"(() => {{"
                 f"  const wpp = window.__react_devtools_hook;"
                 f"  setTimeout(() => wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_options}).catch(() => null), 0);"
                 f"}})()"

@@ -15,13 +15,13 @@ from filelock import FileLock
 from playwright.async_api import Page, ElementHandle, Locator
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 
-from camouchat_whatsapp.exceptions import ElementNotFoundError, HumanizedOperationError # need to create inside the exceptions
+
 from camouchat_whatsapp.exceptions import InteractionControllerError
 from camouchat_core import InteractionControllerProtocol
 from camouchat_whatsapp.api import WapiSession
 from camouchat_whatsapp.api.models import MessageModelAPI
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
-from camouchat_whatsapp.logger import camouchatLogger
+# Todo , add logger later
 
 _clipboard_async_lock = asyncio.Lock()
 
@@ -55,7 +55,7 @@ class InteractionController(InteractionControllerProtocol):
             return
         self.page = page
         self.ui_config = ui_config
-        self.log = log or camouchatLogger
+        self.log = log
         if self.page is None:
             raise ValueError("page must not be None")
         self._wapi: Optional[WapiSession] = wapi
@@ -89,7 +89,7 @@ class InteractionController(InteractionControllerProtocol):
             self.log.debug("Msg Box Clicked.")
 
             if not chat_id:
-                raise HumanizedOperationError("Could not determine active chat ID from bridge.")
+                raise InteractionControllerError("Could not determine active chat ID from bridge.")
 
             # typing state
             if await bridge.mark_is_composing(chat_id=chat_id):
@@ -120,7 +120,7 @@ class InteractionController(InteractionControllerProtocol):
             return success
 
         except Exception as e:
-            raise HumanizedOperationError(f"API Text typing failed: {e}") from e
+            raise InteractionControllerError(f"API Text typing failed: {e}") from e
 
     # ----------------------------------------------------
 
@@ -201,7 +201,7 @@ class InteractionController(InteractionControllerProtocol):
         """Focus the WhatsApp message input or a provided input target."""
         target = source or self.ui_config.message_box()
         if not target:
-            raise ElementNotFoundError("Input Element not found.")
+            raise InteractionControllerError("Input Element not found.")
 
         await target.click(timeout=5000)
         return target
@@ -260,7 +260,7 @@ class InteractionController(InteractionControllerProtocol):
         """Clear the WhatsApp message input or a provided input target."""
         target = source or self.ui_config.message_box()
         if not target:
-            raise ElementNotFoundError("Input Element not found.")
+            raise InteractionControllerError("Input Element not found.")
 
         await self._ensure_clean_input(target)
 
@@ -352,7 +352,7 @@ class InteractionController(InteractionControllerProtocol):
     ) -> bool:
         """Fallback to instant fill when typing fails."""
         if not source:
-            raise ElementNotFoundError("Source is Empty in _instant_fill.")
+            raise InteractionControllerError("Source is Empty in _instant_fill.")
 
         try:
             await source.fill(text)
@@ -362,7 +362,7 @@ class InteractionController(InteractionControllerProtocol):
         except (PlaywrightTimeoutError, PlaywrightError) as e:
             await self.page.keyboard.press("Escape", delay=0.5)
             await self.page.keyboard.press("Escape", delay=0.5)
-            raise HumanizedOperationError(
+            raise InteractionControllerError(
                 "Instant fill failed. Typing operation was not successful."
             ) from e
 

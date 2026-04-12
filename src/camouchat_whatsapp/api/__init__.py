@@ -8,12 +8,13 @@ Managers :
 
 from .wa_js import WapiWrapper
 from playwright.async_api import Page
-from .chat_api_processor import ChatApiManager
-from .msg_api_processor import MessageApiManager
-from camouchat.camouchat_logger import camouchatLogger
-
+from .managers import ChatApiManager, MessageApiManager
+# todo add logger later
 
 class WapiSession:
+    """
+    WapiSession maintains all the other Core Internal Managers.
+    """
     # Todo , Initiate WapiSession with weakref to maintain Obj Singleton
     def __init__(self, page: Page):
         self.page = page

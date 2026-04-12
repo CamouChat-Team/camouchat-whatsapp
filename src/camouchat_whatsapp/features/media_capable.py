@@ -6,28 +6,45 @@ import asyncio
 import random
 import re
 import weakref
+from dataclasses import dataclass
+from enum import Enum
 from logging import Logger, LoggerAdapter
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
+from camouchat.Exceptions.whatsapp import MenuError, MediaCapableError, WhatsAppError
+from camouchat_whatsapp.api import WapiSession
+from camouchat_whatsapp.api.models import MessageModelAPI
+from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
+from camouchat_browser import ProfileInfo
+from camouchat_core import MediaCapableProtocol
 from playwright.async_api import (
     Page,
     Locator,
     FileChooser,
     TimeoutError as PlaywrightTimeoutError,
 )
+# Todo add logger later.
 
-from camouchat.BrowserManager.profile_info import ProfileInfo
-from camouchat.Exceptions.whatsapp import MenuError, MediaCapableError, WhatsAppError
-from camouchat.contracts.media_capable import (
-    MediaCapableProtocol,
-    MediaType,
-    FileTyped,
-)
-from camouchat.WhatsApp.api import WapiSession
-from camouchat.WhatsApp.api.models import MessageModelAPI
-from camouchat.WhatsApp.core.web_ui_config import WebSelectorConfig
-from camouchat.camouchat_logger import camouchatLogger
+class MediaType(str, Enum):
+    """Supported media types for upload."""
+
+    TEXT = "text"
+    IMAGE = "image"
+    VIDEO = "video"
+    AUDIO = "audio"
+    DOCUMENT = "document"
+
+
+@dataclass(frozen=True)
+class FileTyped:
+    """File metadata for media upload."""
+
+    uri: str
+    name: str
+    mime_type: Optional[str] = None
+    size_bytes: Optional[int] = None
+
 
 # ── Media-type → category bucket ──────────────────────────────────────────────
 _WA_TYPE_TO_CATEGORY: Dict[str, str] = {
@@ -77,13 +94,13 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
         return cls._instances[page]
 
     def __init__(
-        self,
-        page: Page,
-        ui_config: Optional[WebSelectorConfig] = None,
-        log: Optional[Union[Logger, LoggerAdapter]] = None,
-        wapi: Optional[WapiSession] = None,
-        profile: Optional[ProfileInfo] = None,
-        **kwargs,
+            self,
+            page: Page,
+            ui_config: Optional[WebSelectorConfig] = None,
+            log: Optional[Union[Logger, LoggerAdapter]] = None,
+            wapi: Optional[WapiSession] = None,
+            profile: Optional[ProfileInfo] = None,
+            **kwargs,
     ):
         if hasattr(self, "_initialized") and self._initialized:
             return
@@ -92,7 +109,7 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
             raise ValueError("ui_config must not be None")
         self.page = page
         self.ui_config = ui_config
-        self.log = log or camouchatLogger
+        self.log = log
         if self.page is None:
             raise ValueError("page must not be None")
         self._wapi: Optional[WapiSession] = wapi
@@ -189,9 +206,9 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
         return getattr(self._profile, attr)
 
     async def save_media(
-        self,
-        message: MessageModelAPI,
-        filename: Optional[str] = None,
+            self,
+            message: MessageModelAPI,
+            filename: Optional[str] = None,
     ) -> Optional[str]:
         """
         Download and save media from a MessageModelAPI message — Cache API only.

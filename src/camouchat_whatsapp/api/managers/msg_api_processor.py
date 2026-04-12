@@ -14,22 +14,20 @@ Type notation used in docstrings:
 
 import asyncio
 import base64
-from pathlib import Path
 from logging import Logger, LoggerAdapter
-from typing import Any, Callable, Dict, List, Optional, Union
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Union, Sequence
 
-from camouchat.contracts.message_processor import MessageProcessorProtocol
-from camouchat.camouchat_logger import camouchatLogger
+from camouchat_core import MessageProcessorProtocol, StorageProtocol
+from camouchat_whatsappNoOpPattern import NoOpMessageFilter, NoOpStorage
 
-from camouchat.contracts.chat import ChatProtocol
-from camouchat.contracts.storage import StorageProtocol
-from camouchat.Filter.message_filter import MessageFilter
-from camouchat.NoOpPattern import NoOpMessageFilter, NoOpStorage
-from camouchat.WhatsApp.api.models.message_api import MessageModelAPI
-from camouchat.WhatsApp.api.wa_js import WapiWrapper, WAJS_Scripts
+# Todo , Add logger later
+from camouchat_whatsapp.Filter.message_filter import MessageFilter
+from camouchat_whatsapp.api.models import ChatModelAPI, MessageModelAPI
+from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
 
 
-class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, Any]):
+class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI]):
     """
     Domain manager for all WhatsApp message operations.
     It does not need page/ui_config , skipped.
@@ -47,17 +45,17 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, Any]):
     """
 
     def __init__(
-        self,
-        bridge: WapiWrapper,
-        log: Optional[Union[Logger, LoggerAdapter]] = None,
-        storage_obj: Optional[StorageProtocol] = None,
-        filter_obj: Optional[MessageFilter] = None,
+            self,
+            bridge: WapiWrapper,
+            log: Optional[Union[Logger, LoggerAdapter]] = None,
+            storage_obj: Optional[StorageProtocol] = None,
+            filter_obj: Optional[MessageFilter] = None,
     ) -> None:
         self.page = None
         self.ui_config = None
         self.storage = storage_obj or NoOpStorage()
         self.filter = filter_obj or NoOpMessageFilter()
-        self.log = log or camouchatLogger
+        self.log = log
         self._bridge = bridge
         self._bridge_active: bool = False
         self._handlers: List[Callable[[MessageModelAPI], Any]] = []
@@ -212,15 +210,15 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, Any]):
     # ──────────────────────────────────────────────
 
     async def get_messages(
-        self,
-        chat_id: str,
-        count: int = 50,
-        direction: str = "before",
-        only_unread: bool = False,
-        media: Optional[str] = None,
-        include_calls: bool = False,
-        anchor_msg_id: Optional[str] = None,
-    ) -> List[MessageModelAPI]:
+            self,
+            chat_id: str,
+            count: int = 50,
+            direction: str = "before",
+            only_unread: bool = False,
+            media: Optional[str] = None,
+            include_calls: bool = False,
+            anchor_msg_id: Optional[str] = None,
+    ) -> Sequence[MessageModelAPI]:
         """
         [Type: RAM]
         Pulls messages from React MsgStore with zero network cost.
@@ -251,33 +249,22 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, Any]):
         return [MessageModelAPI.from_dict(r) for r in (raw_list or [])]
 
     async def fetch_messages(
-        self, chat: ChatProtocol, retry: int = 5, **kwargs
-    ) -> List[MessageModelAPI]:
+            self, chat: ChatModelAPI, **kwargs
+    ) -> Sequence[MessageModelAPI]:
         """[Type: RAM] Fetch messages, fulfilling interface via generic storage pass."""
+
+        if chat.id_serialized is None:
+            ValueError("chat.id_serialized is None")
+
+        count = kwargs.get("count", 0)
         chat_id = chat.id_serialized
-        assert chat_id is not None
-        msgList = await self.get_messages(chat_id, **kwargs)
+        direction = kwargs.get("direction", "before")
+        only_unread = kwargs.get("only_unread", False)
+        media = kwargs.get("media", None)
+        include_calls = kwargs.get("include_calls", False)
+        anchor_msg_id = kwargs.get("anchor_msg_id", None)
 
-        new_msgs = msgList
-        if self.storage and hasattr(self.storage, "check_message_if_exists_async"):
-            new_msgs = []
-            for m in msgList:
-                msg_id = m.id_serialized
-                if msg_id is not None:
-                    if not await self.storage.check_message_if_exists_async(msg_id=msg_id):
-                        new_msgs.append(m)
-
-        if new_msgs and self.storage and hasattr(self.storage, "enqueue_insert"):
-            await self.storage.enqueue_insert(msgs=new_msgs)
-
-        if new_msgs and self.filter and hasattr(self.filter, "apply"):
-            allowed_new = self.filter.apply(msgs=new_msgs)
-            msgList = [m for m in msgList if m not in new_msgs] + allowed_new
-
-        if kwargs.get("only_new", False):
-            return [m for m in msgList if m in allowed_new] if new_msgs else []
-
-        return msgList
+        return await self.get_messages(chat_id, count, direction, only_unread, media, include_calls, anchor_msg_id)
 
     async def get_message_by_id(self, msg_id: str) -> Optional[MessageModelAPI]:
         """
@@ -300,7 +287,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, Any]):
             return None
         return MessageModelAPI.from_dict(raw)
 
-    async def get_unread(self, chat_id: str) -> List[MessageModelAPI]:
+    async def get_unread(self, chat_id: str) -> Sequence[MessageModelAPI]:
         """
         [Type: RAM]
         Convenience shorthand for fetching only unread messages in a chat from memory.
@@ -308,9 +295,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, Any]):
         return await self.get_messages(chat_id, count=-1, only_unread=True)
 
     async def extract_media(
-        self,
-        message: MessageModelAPI,
-        save_path: str,
+            self,
+            message: MessageModelAPI,
+            save_path: str,
     ) -> Dict[str, Any]:
         """
         [Type: NETWORK]
@@ -374,9 +361,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, Any]):
     # ──────────────────────────────────────────────
 
     async def indexdb_get_messages(
-        self,
-        min_row_id: int,
-        limit: int = 50,
+            self,
+            min_row_id: int,
+            limit: int = 50,
     ) -> List[MessageModelAPI]:
         """
         [Type: INDEX DB]
