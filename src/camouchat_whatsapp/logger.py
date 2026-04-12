@@ -1,0 +1,4 @@
+
+def logger():
+    ...
+camouchatLogger = logger() 
