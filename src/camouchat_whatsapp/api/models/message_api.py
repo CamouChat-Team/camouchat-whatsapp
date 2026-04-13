@@ -292,7 +292,9 @@ class MessageModelAPI(MessageProtocol):
             isStarMsg=g("star"),
             isForwarded=g("isForwarded"),
             forwardsCount=(
-                g("forwardingScore") if g("forwardingScore") is not None else g("forwardsCount", 0)
+                g("forwardingScore")
+                if g("forwardingScore") is not None
+                else g("forwardsCount", 0)
             ),
             hasReaction=g("hasReaction"),
             pendingDeleteForMe=g("pendingDeleteForMe"),
@@ -307,7 +309,9 @@ class MessageModelAPI(MessageProtocol):
             isCarouselCard=g("isCarouselCard"),
             activeBotMsgStreamingInProgress=g("activeBotMsgStreamingInProgress"),
             # ── Quoted / reply ─────────────────────────────────────────────────
-            fromQuotedMsg=bool(g("quotedMsg") or g("quotedMsgId") or g("quotedStanzaID")),
+            fromQuotedMsg=bool(
+                g("quotedMsg") or g("quotedMsgId") or g("quotedStanzaID")
+            ),
             isQuotedMsgAvailable=bool(g("quotedMsg")),
             quotedMsgId=g("quotedMsgId") or g("quotedStanzaID"),
             quotedmsgtype=g("quotedmsgtype"),
@@ -316,7 +320,10 @@ class MessageModelAPI(MessageProtocol):
             quotedRemoteJid=g("quotedRemoteJid"),
             # ── Mentions ───────────────────────────────────────────────────────
             mentionedJidList=(
-                [j if isinstance(j, str) else j.get("_serialized", str(j)) for j in m_list]
+                [
+                    j if isinstance(j, str) else j.get("_serialized", str(j))
+                    for j in m_list
+                ]
                 if (m_list := g("mentionedJidList"))
                 else None
             ),
@@ -409,7 +416,9 @@ class MessageModelAPI(MessageProtocol):
             lines.append(f"  senderDevice: {self.senderWithDevice}")
 
         lines.append(f"  timestamp   : {self.timestamp}")
-        lines.append(f"  ack         : {self.ack}  (0=pending 1=sent 2=delivered 3=read 4=played)")
+        lines.append(
+            f"  ack         : {self.ack}  (0=pending 1=sent 2=delivered 3=read 4=played)"
+        )
 
         # ── Body / caption ────────────────────────────────────────────────────
         if self.body:
@@ -504,7 +513,9 @@ class MessageModelAPI(MessageProtocol):
             if len(mentions) <= 3:
                 lines.append(f"                {', '.join(mentions)}")
             else:
-                lines.append(f"                {', '.join(mentions[:3])} (+{len(mentions)-3} more)")
+                lines.append(
+                    f"                {', '.join(mentions[:3])} (+{len(mentions)-3} more)"
+                )
 
         # ── Media ─────────────────────────────────────────────────────────────
         if self.mimetype:
@@ -526,10 +537,14 @@ class MessageModelAPI(MessageProtocol):
             if self.pollName:
                 lines.append(f"  pollName    : {self.pollName}")
             if self.pollType:
-                lines.append(f"  pollType    : {self.pollType}  content={self.pollContentType}")
+                lines.append(
+                    f"  pollType    : {self.pollType}  content={self.pollContentType}"
+                )
             if self.pollSelectableOptionsCount is not None:
                 sel = self.pollSelectableOptionsCount
-                lines.append(f"  pollSelect  : {sel if sel else 'unlimited'} option(s) per voter")
+                lines.append(
+                    f"  pollSelect  : {sel if sel else 'unlimited'} option(s) per voter"
+                )
 
         # ── Event detail ──────────────────────────────────────────────────────
         if self.msgtype == "event_creation":
@@ -537,9 +552,13 @@ class MessageModelAPI(MessageProtocol):
                 lines.append(f"  eventName   : {self.eventName}")
             if self.eventDescription:
                 desc = self.eventDescription
-                lines.append(f"  eventDesc   : {desc[:80]}{'…' if len(desc) > 80 else ''}")
+                lines.append(
+                    f"  eventDesc   : {desc[:80]}{'…' if len(desc) > 80 else ''}"
+                )
             if self.eventStartTime:
-                lines.append(f"  eventTime   : {self.eventStartTime} → {self.eventEndTime}")
+                lines.append(
+                    f"  eventTime   : {self.eventStartTime} → {self.eventEndTime}"
+                )
             if self.eventJoinLink:
                 lines.append(f"  eventLink   : {self.eventJoinLink}")
             if self.isEventCanceled:

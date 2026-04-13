@@ -7,12 +7,17 @@ import logging
 from unittest.mock import Mock, AsyncMock
 
 import pytest
-from playwright.async_api import Page, Locator, FileChooser, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import (
+    Page,
+    Locator,
+    FileChooser,
+    TimeoutError as PlaywrightTimeoutError,
+)
 
-from camouchat.Exceptions.whatsapp import MediaCapableError
-from camouchat.contracts.media_capable import MediaType, FileTyped
-from camouchat.WhatsApp.features.media_capable import MediaCapable
-from camouchat.WhatsApp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.exceptions import WhatsappMediaError
+from camouchat_whatsapp import MediaType, FileTyped
+from camouchat_whatsapp.features.media_controller import MediaController
+from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 
 # ============================================================================
 # FIXTURES
@@ -41,7 +46,7 @@ def mock_ui_config():
 
 @pytest.fixture
 def media_capable_instance(mock_page, mock_logger, mock_ui_config):
-    return MediaCapable(page=mock_page, log=mock_logger, UIConfig=mock_ui_config)
+    return MediaController(page=mock_page, log=mock_logger, UIConfig=mock_ui_config)
 
 
 # ============================================================================
@@ -52,7 +57,7 @@ def media_capable_instance(mock_page, mock_logger, mock_ui_config):
 @pytest.mark.asyncio
 async def test_init_page_none(mock_logger, mock_ui_config):
     with pytest.raises(ValueError, match="page must not be None"):
-        MediaCapable(page=None, log=mock_logger, UIConfig=mock_ui_config)
+        MediaController(page=None, log=mock_logger, UIConfig=mock_ui_config)
 
 
 @pytest.mark.asyncio
@@ -75,7 +80,7 @@ async def test_menu_clicker_timeout(media_capable_instance, mock_ui_config):
     mock_icon.element_handle.side_effect = PlaywrightTimeoutError("Timeout")
     mock_ui_config.plus_rounded_icon.return_value = mock_icon
 
-    with pytest.raises(MediaCapableError, match="Time out while clicking menu"):
+    with pytest.raises(WhatsappMediaError, match="Time out while clicking menu"):
         await media_capable_instance.menu_clicker()
 
     media_capable_instance.page.keyboard.press.assert_called_with("Escape", delay=0.5)
@@ -128,7 +133,9 @@ async def test_add_media_success(media_capable_instance, mock_ui_config, tmp_pat
     media_capable_instance.page.expect_file_chooser.return_value = FakeFC()
 
     # Execution
-    result = await media_capable_instance.add_media(MediaType.IMAGE, file_typed)
+    result = await media_capable_instance.add_media(
+        file=file_typed, mtype=MediaType.IMAGE
+    )
 
     # Verification
     assert result is True
@@ -169,8 +176,8 @@ async def test_add_media_file_not_found(media_capable_instance, mock_ui_config):
 
     file_typed = FileTyped(uri="/invalid/path.png", name="image.png")
 
-    with pytest.raises(MediaCapableError, match="Invalid file path"):
-        await media_capable_instance.add_media(MediaType.IMAGE, file_typed)
+    with pytest.raises(WhatsappMediaError, match="Invalid file path"):
+        await media_capable_instance.add_media(file=file_typed, mtype=MediaType.IMAGE)
 
 
 @pytest.mark.asyncio

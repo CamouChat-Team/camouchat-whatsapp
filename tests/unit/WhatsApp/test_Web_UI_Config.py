@@ -9,7 +9,7 @@ from unittest.mock import Mock, AsyncMock
 import pytest
 from playwright.async_api import Page, Locator, ElementHandle
 
-from camouchat.WhatsApp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 
 # ============================================================================
 # FIXTURES
@@ -128,7 +128,9 @@ async def test_link_phone_number_button(config_instance):
 @pytest.mark.asyncio
 async def test_country_selector_button(config_instance):
     config_instance.country_selector_button()
-    config_instance.page.locator.assert_called_with("button:has(span[data-icon='chevron'])")
+    config_instance.page.locator.assert_called_with(
+        "button:has(span[data-icon='chevron'])"
+    )
 
 
 @pytest.mark.asyncio

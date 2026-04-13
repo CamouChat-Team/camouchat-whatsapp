@@ -9,10 +9,9 @@ import logging
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "camouchat"))
-
-from camouchat.StorageDB import SQLAlchemyStorage
-from camouchat.BrowserManager.profile_manager import ProfileManager
+import pytest
+from camouchat_whatsapp.storage.sqlalchemy_storage import SQLAlchemyStorage
+from camouchat_browser import ProfileManager
 
 # Configure logging
 logging.basicConfig(
@@ -41,6 +40,7 @@ class MockChat:
         self.id_serialized = f"chat_{name}"
 
 
+@pytest.mark.asyncio
 async def test_basic_operations():
     """Test basic SQLAlchemy storage operations."""
     print("\n" + "=" * 60)
@@ -60,7 +60,8 @@ async def test_basic_operations():
     async with storage:
         # Create test messages
         messages = [
-            MockMessage(f"msg_{i}", f"Hello {i}", i % 2 != 0, "TestChat") for i in range(10)
+            MockMessage(f"msg_{i}", f"Hello {i}", i % 2 != 0, "TestChat")
+            for i in range(10)
         ]
 
         print(f"\n📝 Enqueueing {len(messages)} messages...")
@@ -81,7 +82,9 @@ async def test_basic_operations():
         all_msgs = await storage.get_all_messages_async(limit=10)
         print(f"  Found {len(all_msgs)} messages")
         for msg in all_msgs[:3]:
-            print(f"    - {msg['id_serialized']}: {msg['body'][:30]} (fromMe={msg['fromMe']})")
+            print(
+                f"    - {msg['id_serialized']}: {msg['body'][:30]} (fromMe={msg['fromMe']})"
+            )
 
         # Query by chat
         print("\n💬 Querying messages by chat:")
@@ -91,6 +94,7 @@ async def test_basic_operations():
     print("✅ Basic operations test complete")
 
 
+@pytest.mark.asyncio
 async def test_profile_integration():
     """Test ProfileManager integration."""
     print("\n" + "=" * 60)
@@ -108,7 +112,9 @@ async def test_profile_integration():
 
     # Create storage from profile
     queue = asyncio.Queue()
-    storage = SQLAlchemyStorage.from_profile(profile=profile, queue=queue, log=log, batch_size=3)
+    storage = SQLAlchemyStorage.from_profile(
+        profile=profile, queue=queue, log=log, batch_size=3
+    )
 
     print("\n✅ Created storage from profile:")
     print(f"  - Database URL: {storage.database_url}")
@@ -116,7 +122,9 @@ async def test_profile_integration():
     async with storage:
         # Add test messages
         messages = [
-            MockMessage(f"profile_msg_{i}", f"Test message {i}", False, "ProfileTestChat")
+            MockMessage(
+                f"profile_msg_{i}", f"Test message {i}", False, "ProfileTestChat"
+            )
             for i in range(5)
         ]
 
@@ -149,6 +157,7 @@ async def test_profile_integration():
     print("✅ Profile integration test complete")
 
 
+@pytest.mark.asyncio
 async def test_message_processor_compatibility():
     """Test MessageProcessor compatibility (interface check)."""
     print("\n" + "=" * 60)
@@ -204,6 +213,7 @@ async def test_message_processor_compatibility():
     print("✅ MessageProcessor compatibility verified")
 
 
+@pytest.mark.asyncio
 async def test_batch_performance():
     """Test batch insertion performance."""
     print("\n" + "=" * 60)

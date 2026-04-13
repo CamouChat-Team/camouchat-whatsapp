@@ -5,15 +5,20 @@ from typing import Any, Sequence
 
 from playwright.async_api import Page
 
-from camouchat_core import ChatProtocol ,ChatProcessorProtocol
+from camouchat_core import ChatProtocol, ChatProcessorProtocol
 from camouchat_whatsapp.api.models import ChatModelAPI
 from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
 from camouchat_whatsapp.logger import w_logger
+
 # todo , Add Auto logger later
+
 
 class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
     def __init__(
-        self, page: Page, bridge: WapiWrapper, logger: Logger | LoggerAdapter | None = None
+        self,
+        page: Page,
+        bridge: WapiWrapper,
+        logger: Logger | LoggerAdapter | None = None,
     ) -> None:
         self.page = page
         self.ui_config = None
@@ -21,9 +26,9 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
         self._bridge = bridge
         self._last_opened_chat_id: str | None = None
 
-    async def fetch_chats(self, **kwargs) -> Sequence[ChatProtocol]:
+    async def fetch_chats(self, **kwargs) -> Sequence[ChatModelAPI]:
         # Todo , add all the params into it & add docstring
-        return await self.get_chat_list(**kwargs)  # type: ignore[return-value]
+        return await self.get_chat_list(**kwargs)
 
     async def open_chat(self, chat: ChatProtocol) -> bool:
         """
@@ -38,21 +43,26 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
             raise ValueError("Chat is None, cannot open chat")
 
         if chat.id_serialized == self._last_opened_chat_id:
-            self.log.debug(f"Chat {chat.id_serialized} is already the active view based on cache.")
+            self.log.debug(
+                f"Chat {chat.id_serialized} is already the active view based on cache."
+            )
             return True
 
         # If we don't have a formatted Title, we cannot safely scrape the DOM. Skip to RAM fallback.
-        if chat.formattedTitle:
-            self.log.debug(f"Locating chat: {chat.formattedTitle} ({chat.id_serialized})")
+        name = getattr(chat, "formattedTitle", None)
+        if name:
+            self.log.debug(f"Locating chat: {name} ({chat.id_serialized})")
 
             try:
                 chat_locator = (
                     page.locator("div#pane-side, div[aria-label*='Chat list' i]")
-                    .locator(f"span[title='{chat.formattedTitle}']")
+                    .locator(f"span[title='{name}']")
                     .first
                 )
 
-                if await chat_locator.count() > 0 and await chat_locator.is_visible(timeout=5000):
+                if await chat_locator.count() > 0 and await chat_locator.is_visible(
+                    timeout=5000
+                ):
                     box = await chat_locator.bounding_box()
                     if box:
                         # Calculate center coordinates
@@ -65,7 +75,8 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
 
                         # Humanize Movement
                         await page.mouse.move(
-                            target_x + random.uniform(-10, 10), target_y + random.uniform(-10, 10)
+                            target_x + random.uniform(-10, 10),
+                            target_y + random.uniform(-10, 10),
                         )
                         await asyncio.sleep(random.uniform(0.1, 0.4))
 
@@ -79,12 +90,12 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
                         return True
             except Exception as e:
                 self.log.warning(
-                    f"Stealth DOM scrape failed for {chat.formattedTitle}, reverting to RAM: {e}"
+                    f"Stealth DOM scrape failed for {name}, reverting to RAM: {e}"
                 )
 
         # Virtualized DOM Fallback
         self.log.debug(
-            f"Chat '{chat.formattedTitle or chat.id_serialized}' not visible on screen. Triggering RAM open."
+            f"Chat '{name or chat.id_serialized}' not visible on screen. Triggering RAM open."
         )
 
         # Inject ambient human pointer telemetry before triggering magical DOM re-renders.
@@ -107,7 +118,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
     # RAM BASED METHODS
     # ──────────────────────────────────────────────
 
-    async def get_chat_by_id(self, chat_id: str) -> ChatProtocol:
+    async def get_chat_by_id(self, chat_id: str) -> ChatModelAPI:
         """
         [Type: RAM]
         Fetch all the scalar data from React memory structured via ChatModelAPI.
@@ -135,7 +146,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
         with_labels: list | None = None,
         anchor_chat_id: str | None = None,
         ignore_group_metadata: bool = True,
-    ) -> Sequence[ChatProtocol]:
+    ) -> Sequence[ChatModelAPI]:
         """
         [Type: RAM]
         Fetch a list of chats from ChatStore in sidebar order directly from React memory.

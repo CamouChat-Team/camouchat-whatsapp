@@ -6,18 +6,16 @@ import asyncio
 import random
 import re
 import weakref
-from dataclasses import dataclass
-from enum import Enum
 from logging import Logger, LoggerAdapter
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-from camouchat_whatsapp.exceptions import  WhatsappMediaError, WhatsAppError
+from camouchat_whatsapp.exceptions import WhatsappMediaError, WhatsAppError
 from camouchat_whatsapp.api import WapiSession
 from camouchat_whatsapp.api.models import MessageModelAPI
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_browser import ProfileInfo
-from camouchat_core import MediaControllerProtocol
+from camouchat_core import MediaControllerProtocol, MediaType, FileTyped
 from playwright.async_api import (
     Page,
     Locator,
@@ -27,27 +25,7 @@ from playwright.async_api import (
 
 from camouchat_whatsapp.logger import w_logger
 
-
 # Todo add logger later.
-
-class MediaType(str, Enum):
-    """Supported media types for upload."""
-
-    TEXT = "text"
-    IMAGE = "image"
-    VIDEO = "video"
-    AUDIO = "audio"
-    DOCUMENT = "document"
-
-
-@dataclass(frozen=True)
-class FileTyped:
-    """File metadata for media upload."""
-
-    uri: str
-    name: str
-    mime_type: Optional[str] = None
-    size_bytes: Optional[int] = None
 
 
 # ── Media-type → category bucket ──────────────────────────────────────────────
@@ -85,7 +63,9 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
         Retries every second until WA's render cycle caches the blob.
     """
 
-    _instances: weakref.WeakKeyDictionary[Page, MediaController] = weakref.WeakKeyDictionary()
+    _instances: weakref.WeakKeyDictionary[Page, MediaController] = (
+        weakref.WeakKeyDictionary()
+    )
     _initialized: bool = False
 
     def __new__(cls, *args, **kwargs) -> MediaController:
@@ -98,13 +78,13 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
         return cls._instances[page]
 
     def __init__(
-            self,
-            page: Page,
-            ui_config: Optional[WebSelectorConfig] = None,
-            log: Optional[Union[Logger, LoggerAdapter]] = None,
-            wapi: Optional[WapiSession] = None,
-            profile: Optional[ProfileInfo] = None,
-            **kwargs,
+        self,
+        page: Page,
+        ui_config: Optional[WebSelectorConfig] = None,
+        log: Optional[Union[Logger, LoggerAdapter]] = None,
+        wapi: Optional[WapiSession] = None,
+        profile: Optional[ProfileInfo] = None,
+        **kwargs,
     ):
         if hasattr(self, "_initialized") and self._initialized:
             return
@@ -127,10 +107,14 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
     async def menu_clicker(self) -> None:
         """Open the attachment menu."""
         try:
-            menu_icon = await self.ui_config.plus_rounded_icon().element_handle(timeout=1000)
+            menu_icon = await self.ui_config.plus_rounded_icon().element_handle(
+                timeout=1000
+            )
 
             if not menu_icon:
-                raise WhatsappMediaError("Menu Locator return None/Empty / menu_clicker / MediaCapable")
+                raise WhatsappMediaError(
+                    "Menu Locator return None/Empty / menu_clicker / MediaCapable"
+                )
 
             await menu_icon.click(timeout=3000)
             await asyncio.sleep(random.uniform(1.0, 1.5))
@@ -139,13 +123,13 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
             await self.page.keyboard.press("Escape", delay=0.5)
             raise WhatsappMediaError("Time out while clicking menu") from e
 
-    async def add_media(self, file: FileTyped, **kwargs) -> bool:
+    async def add_media(self, file: FileTyped, **kwargs: Any) -> bool:
         """Upload a media file to the current chat."""
-        mtype : MediaType = kwargs.get("mtype") or None
-        if mtype is None  :
+        mtype: Any = kwargs.get("mtype") or None
+        if mtype is None:
             raise ValueError("mtype is None.")
 
-        if not isinstance(mtype,MediaType):
+        if not isinstance(mtype, MediaType):
             raise TypeError("mtype must be a MediaType")
 
         force = kwargs.get("force", False)
@@ -169,7 +153,9 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
             if force:
                 await asyncio.sleep(random.uniform(0.6, 1.0))
                 try:
-                    send_btn = self.page.get_by_role("button", name=re.compile(r"send", re.I)).last
+                    send_btn = self.page.get_by_role(
+                        "button", name=re.compile(r"send", re.I)
+                    ).last
                     await send_btn.click(timeout=4000)
                     self.log.debug("Media preview send button clicked.")
                 except Exception:
@@ -218,9 +204,9 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
         return getattr(self._profile, attr)
 
     async def save_media(
-            self,
-            message: MessageModelAPI,
-            filename: Optional[str] = None,
+        self,
+        message: MessageModelAPI,
+        filename: Optional[str] = None,
     ) -> Optional[str]:
         """
         Download and save media from a MessageModelAPI message — Cache API only.
@@ -291,5 +277,7 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
         )
 
         path = result.get("path") if result.get("success") else None
-        self.log.debug(f"[save_media] type={wa_type!r} category={category!r} path={path!r}")
+        self.log.debug(
+            f"[save_media] type={wa_type!r} category={category!r} path={path!r}"
+        )
         return path

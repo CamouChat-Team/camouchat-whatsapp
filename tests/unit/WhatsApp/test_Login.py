@@ -14,9 +14,9 @@ from playwright.async_api import (
     BrowserContext,
 )
 
-from camouchat.Exceptions.whatsapp import LoginError
-from camouchat.WhatsApp.core.login import Login
-from camouchat.WhatsApp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.exceptions import LoginError
+from camouchat_whatsapp.core.login import Login
+from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 
 # ============================================================================
 # FIXTURES
@@ -43,7 +43,7 @@ def mock_ui_config():
 
 @pytest.fixture
 def login_instance(mock_page, mock_ui_config, mock_logger):
-    return Login(page=mock_page, UIConfig=mock_ui_config, log=mock_logger)
+    return Login(page=mock_page, ui_config=mock_ui_config, log=mock_logger)
 
 
 # ============================================================================
@@ -54,7 +54,7 @@ def login_instance(mock_page, mock_ui_config, mock_logger):
 @pytest.mark.asyncio
 async def test_init_page_none(mock_logger, mock_ui_config):
     with pytest.raises(ValueError, match="page must not be None"):
-        Login(page=None, UIConfig=mock_ui_config, log=mock_logger)
+        Login(page=None, ui_config=mock_ui_config, log=mock_logger)
 
 
 @pytest.mark.asyncio
@@ -89,11 +89,11 @@ async def test_login_existing_session(login_instance, tmp_path):
 
     mock_canvas = AsyncMock(spec=Locator)
     mock_canvas.is_visible.return_value = False  # QR gone = scanned
-    login_instance.UIConfig.qr_canvas.return_value = mock_canvas
+    login_instance.ui_config.qr_canvas.return_value = mock_canvas
 
     mock_chats = AsyncMock(spec=Locator)
     mock_chats.wait_for = AsyncMock()
-    login_instance.UIConfig.chat_list.return_value = mock_chats
+    login_instance.ui_config.chat_list.return_value = mock_chats
 
     result = await login_instance.login(method=0)
 
@@ -149,11 +149,11 @@ async def test_code_login_success(login_instance, tmp_path):
     # 1. Phone login button
     mock_role_btn = AsyncMock(spec=Locator)
     mock_role_btn.count.return_value = 1
-    login_instance.UIConfig.link_phone_number_button.return_value = mock_role_btn
+    login_instance.ui_config.link_phone_number_button.return_value = mock_role_btn
 
     # 2. Country selector
     mock_chevron = AsyncMock(spec=Locator)
-    login_instance.UIConfig.country_selector_button.return_value = mock_chevron
+    login_instance.ui_config.country_selector_button.return_value = mock_chevron
 
     # 3. Country list items
     mock_countries = AsyncMock(spec=Locator)
@@ -161,18 +161,18 @@ async def test_code_login_success(login_instance, tmp_path):
     mock_country_item = AsyncMock(spec=Locator)
     mock_country_item.inner_text.return_value = "India"
     mock_countries.nth.return_value = mock_country_item
-    login_instance.UIConfig.country_list_items.return_value = mock_countries
+    login_instance.ui_config.country_list_items.return_value = mock_countries
 
     # 4. Phone Input
     mock_input = AsyncMock(spec=Locator)
     mock_input.count.return_value = 1
-    login_instance.UIConfig.phone_number_input.return_value = mock_input
+    login_instance.ui_config.phone_number_input.return_value = mock_input
 
     # 5. Code element
     mock_code_el = AsyncMock(spec=Locator)
     mock_code_el.wait_for = AsyncMock()
     mock_code_el.get_attribute.return_value = "ABC-123"
-    login_instance.UIConfig.link_code_container.return_value = mock_code_el
+    login_instance.ui_config.link_code_container.return_value = mock_code_el
 
     # Execution
     result = await login_instance.login(
@@ -216,7 +216,7 @@ async def test_code_login_btn_missing(login_instance, tmp_path):
     """Test failure when phone login button is missing."""
     mock_role_btn = AsyncMock(spec=Locator)
     mock_role_btn.count.return_value = 0  # Button not found
-    login_instance.UIConfig.link_phone_number_button.return_value = mock_role_btn
+    login_instance.ui_config.link_phone_number_button.return_value = mock_role_btn
 
     with pytest.raises(LoginError, match="Login-with-phone-number button not found"):
         await login_instance.login(
@@ -229,11 +229,11 @@ async def test_code_login_country_missing(login_instance, tmp_path):
     """Test failure when country selector not found."""
     mock_role_btn = AsyncMock(spec=Locator)
     mock_role_btn.count.return_value = 1
-    login_instance.UIConfig.link_phone_number_button.return_value = mock_role_btn
+    login_instance.ui_config.link_phone_number_button.return_value = mock_role_btn
 
     mock_chevron = AsyncMock(spec=Locator)
     mock_chevron.count.return_value = 0  # Selector missing
-    login_instance.UIConfig.country_selector_button.return_value = mock_chevron
+    login_instance.ui_config.country_selector_button.return_value = mock_chevron
 
     with pytest.raises(LoginError, match="Country selector not found"):
         await login_instance.login(
@@ -254,7 +254,7 @@ async def test_code_login_timeout(login_instance, tmp_path):
     mock_role_btn = AsyncMock(spec=Locator)
     mock_role_btn.count.return_value = 1
     mock_role_btn.click.side_effect = PlaywrightTimeoutError("Bust")
-    login_instance.UIConfig.link_phone_number_button.return_value = mock_role_btn
+    login_instance.ui_config.link_phone_number_button.return_value = mock_role_btn
 
     with pytest.raises(LoginError, match="Failed to open phone login screen"):
         await login_instance.login(

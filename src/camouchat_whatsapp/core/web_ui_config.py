@@ -16,10 +16,13 @@ from playwright.async_api import ElementHandle, Locator, Page
 from camouchat_core import UiConfigProtocol
 from camouchat_whatsapp.logger import w_logger
 
+
 class WebSelectorConfig(UiConfigProtocol):
     """Generic Custom Class , Different from every Platform"""
 
-    def __init__(self, page: Page, log: Optional[Union[Logger, LoggerAdapter]] = None) -> None:
+    def __init__(
+        self, page: Page, log: Optional[Union[Logger, LoggerAdapter]] = None
+    ) -> None:
         self.page = page
         self.log = log or w_logger
         if self.page is None:
@@ -40,7 +43,9 @@ class WebSelectorConfig(UiConfigProtocol):
 
     def searchBox_chatList_panel(self) -> Locator:
         """Returns the search box on the chat list panel"""
-        return self.page.get_by_role("textbox", name=re.compile("search input textbox", re.I)).first
+        return self.page.get_by_role(
+            "textbox", name=re.compile("search input textbox", re.I)
+        ).first
 
     def message_box(self) -> Locator:
         """Message Input box on the message panel"""
@@ -128,7 +133,9 @@ class WebSelectorConfig(UiConfigProtocol):
             if chat is None:
                 return False
 
-        icon = await chat.query_selector("span[data-icon='default-community-refreshed']")
+        icon = await chat.query_selector(
+            "span[data-icon='default-community-refreshed']"
+        )
         if icon and await icon.is_visible():
             return True
         return False
@@ -148,7 +155,9 @@ class WebSelectorConfig(UiConfigProtocol):
 
     def link_phone_number_button(self) -> Locator:
         """Returns the locator for 'Link with phone number' button."""
-        return self.page.get_by_role("button", name=re.compile(r"log.*in.*phone number", re.I))
+        return self.page.get_by_role(
+            "button", name=re.compile(r"log.*in.*phone number", re.I)
+        )
 
     def country_selector_button(self) -> Locator:
         """Returns the locator for country selection dropdown (chevron icon)."""
@@ -199,7 +208,9 @@ class WebSelectorConfig(UiConfigProtocol):
         Returns a locator for all messages in the current open chat.
         Each message element has a unique `data-id` and role "row".
         """
-        return self.page.locator('div[role="row"] div[data-id], div[data-id]:has(.copyable-text)')
+        return self.page.locator(
+            'div[role="row"] div[data-id], div[data-id]:has(.copyable-text)'
+        )
 
     async def messages_incoming(self) -> Locator:
         """filters for the personal | group chat incoming messages"""
@@ -217,7 +228,9 @@ class WebSelectorConfig(UiConfigProtocol):
             if message_element is None:
                 return ""
 
-        span = await message_element.query_selector("span[data-testid='selectable-text']")
+        span = await message_element.query_selector(
+            "span[data-testid='selectable-text']"
+        )
         if not span:
             # Fallback to inner_text directly if span not found
             return await message_element.inner_text() or ""
@@ -311,7 +324,9 @@ class WebSelectorConfig(UiConfigProtocol):
         pic = self.page.get_by_role("button", name=re.compile("open picture", re.I))
         if pic and await pic.is_visible():
             return True
-        pic2 = await message.query_selector("xpath=.//img[contains(@src,'data:image/')]")
+        pic2 = await message.query_selector(
+            "xpath=.//img[contains(@src,'data:image/')]"
+        )
         return await pic2.is_visible() if pic2 else False
 
     @staticmethod
@@ -410,7 +425,9 @@ class WebSelectorConfig(UiConfigProtocol):
         "Your chats and calls are private"
         """
         page = self.page
-        button = await page.query_selector("div[data-animate-model-popup] button:text-is('OK')")
+        button = await page.query_selector(
+            "div[data-animate-model-popup] button:text-is('OK')"
+        )
         if button:
             try:
                 if await button.is_visible():
@@ -433,30 +450,50 @@ class WebSelectorConfig(UiConfigProtocol):
 
     async def group_info(self) -> Optional[ElementHandle]:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return await dialog.query_selector("li:has-text('group info')") if dialog else None
+        return (
+            await dialog.query_selector("li:has-text('group info')") if dialog else None
+        )
 
     async def select_messages(self) -> Optional[ElementHandle]:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return await dialog.query_selector("li:has-text('select messages')") if dialog else None
+        return (
+            await dialog.query_selector("li:has-text('select messages')")
+            if dialog
+            else None
+        )
 
     async def mute_notifications(self) -> Optional[ElementHandle]:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return await dialog.query_selector("li:has-text('mute notifications')") if dialog else None
+        return (
+            await dialog.query_selector("li:has-text('mute notifications')")
+            if dialog
+            else None
+        )
 
     async def disappearing_messages(self) -> Optional[ElementHandle]:
         dialog = await self.page.query_selector("div[role='dialog']")
         return (
-            await dialog.query_selector("li:has-text('disappearing messages')") if dialog else None
+            await dialog.query_selector("li:has-text('disappearing messages')")
+            if dialog
+            else None
         )
 
     async def add_to_fav(self) -> Optional[ElementHandle]:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return await dialog.query_selector("li:has-text('add to favourites')") if dialog else None
+        return (
+            await dialog.query_selector("li:has-text('add to favourites')")
+            if dialog
+            else None
+        )
 
     async def close_chat(self) -> Optional[ElementHandle]:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return await dialog.query_selector("li:has-text('close chat')") if dialog else None
+        return (
+            await dialog.query_selector("li:has-text('close chat')") if dialog else None
+        )
 
     async def clear_chat(self) -> Optional[ElementHandle]:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return await dialog.query_selector("li:has-text('clear chat')") if dialog else None
+        return (
+            await dialog.query_selector("li:has-text('clear chat')") if dialog else None
+        )

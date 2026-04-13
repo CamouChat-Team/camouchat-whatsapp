@@ -1,17 +1,19 @@
 """
-Unit tests for HumanizedOperations class.
+Unit tests for HumanInteractionController class.
 Tests cover typing simulation, clipboard usage, and fallback mechanisms.
 """
 
 import logging
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from playwright.async_api import Page, Locator, TimeoutError as PlaywrightTimeoutError
-
-from camouchat.Exceptions.base import ElementNotFoundError, HumanizedOperationError
-from camouchat.WhatsApp.features.human_interaction_controller import HumanInteractionController
-from camouchat.WhatsApp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.exceptions import WhatsAppInteractionError
+from camouchat_whatsapp.features.interaction_controller import (
+    InteractionController as HumanInteractionController,
+)
+from playwright.async_api import Locator, Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 # ============================================================================
 # FIXTURES
@@ -32,12 +34,16 @@ def mock_page():
 
 @pytest.fixture
 def mock_ui_config():
-    return Mock(spec=WebSelectorConfig)
+    config = Mock(spec=WebSelectorConfig)
+    config.message_box.return_value = AsyncMock(spec=Locator)
+    return config
 
 
 @pytest.fixture
 def humanize_fixture(mock_page, mock_logger, mock_ui_config):
-    with patch("camouchat.WhatsApp.human_interaction_controller.pyperclip") as mock_clip:
+    with patch(
+        "camouchat_whatsapp.features.interaction_controller.pyperclip"
+    ) as mock_clip:
         humanize = HumanInteractionController(
             page=mock_page, log=mock_logger, ui_config=mock_ui_config
         )
@@ -60,21 +66,17 @@ async def test_typing_success_short(humanize_fixture):
     """Test typing short text uses keyboard typing."""
     humanize, mock_clip = humanize_fixture
     mock_source = AsyncMock(spec=Locator)
+    mock_source.inner_text.return_value = "stale text"
 
     result = await humanize.type_text(text="Hello World", source=mock_source)
 
     assert result is True
-    # Should click source
-    mock_source.click.assert_called_once()
-    # Should clear text (Ctrl+A, Backspace)
+    assert mock_source.click.call_count == 2
     mock_source.press.assert_any_call("Control+A")
     mock_source.press.assert_any_call("Backspace")
-
-    # Should type text directly
     humanize.page.keyboard.type.assert_called_with(
         text="Hello World", delay=pytest.approx(90, abs=10)
     )
-    # Should NOT use clipboard
     mock_clip.copy.assert_not_called()
 
 
@@ -94,8 +96,6 @@ async def test_typing_success_long(humanize_fixture):
 
     assert result is True
 
-    # Each paste calls pyperclip.copy twice: once to set, once to restore.
-    # 2 long lines = 4 pyperclip.copy calls total.
     assert mock_clip.copy.call_count == 4
     humanize.page.keyboard.press.assert_any_call("Control+V")
     humanize.page.keyboard.press.assert_any_call("Shift+Enter")  # Newline handling
@@ -108,14 +108,9 @@ async def test_typing_timeout_fallback(humanize_fixture):
     mock_source = AsyncMock(spec=Locator)
     mock_source.click.side_effect = PlaywrightTimeoutError("Timeout")
 
-    # Use patch to mock _Instant_fill to verify it gets called?
-    # Or just verify behavior provided it works.
-
-    result = await humanize.type_text(text="test", source=mock_source)
+    result = await humanize.type_text(text="test", source=mock_source, send=True)
 
     assert result is True
-    # Verify fallback behavior: fill was called if _Instant_fill called fill
-    # Actually, we can spy on _Instant_fill if we want, but let's check outcome
     mock_source.fill.assert_called_with("test")
     humanize.page.keyboard.press.assert_called_with("Enter")
 
@@ -126,7 +121,9 @@ async def test_instant_fill_success(humanize_fixture):
     humanize, _ = humanize_fixture
     mock_source = AsyncMock(spec=Locator)
 
-    result = await humanize._Instant_fill(text="failover", source=mock_source)
+    result = await humanize._Instant_fill(
+        text="failover", source=mock_source, send=True
+    )
 
     assert result is True
     mock_source.fill.assert_called_with("failover")
@@ -138,26 +135,17 @@ async def test_instant_fill_failure(humanize_fixture):
     """Test _Instant_fill returns False on exception."""
     humanize, _ = humanize_fixture
     mock_source = AsyncMock(spec=Locator)
-    # Mock fallback failure logic - raises HumanizedOperationError?
     mock_source.fill.side_effect = Exception("Fill Error")
-
-    # The code implementation:
-    # try: fill... except specific Playwright Errors -> raise HumanizedOperationError
-    # BUT if generic Exception? It crashes.
-    # Exception("Fill Error") is not PlaywrightTimeoutError.
-
-    # Test internal exception bubbling or handling?
-    # Let's mock a PlaywrightTimeoutError to test the catch block
     mock_source.fill.side_effect = PlaywrightTimeoutError("Time")
 
-    # It should raise HumanizedOperationError
-    with pytest.raises(HumanizedOperationError):
+    with pytest.raises(WhatsAppInteractionError):
         await humanize._Instant_fill(text="failover", source=mock_source)
 
 
 @pytest.mark.asyncio
 async def test_typing_no_source(humanize_fixture):
-    """Test typing raises error if source is None."""
+    """Test typing raises error if source is None and message_box is not found."""
     humanize, _ = humanize_fixture
-    with pytest.raises(ElementNotFoundError):
+    humanize.ui_config.message_box.return_value = None
+    with pytest.raises(WhatsAppInteractionError):
         await humanize.type_text(text="test", source=None)

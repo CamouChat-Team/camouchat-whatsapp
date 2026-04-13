@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import (
 
 from camouchat_browser import ProfileInfo
 from camouchat_whatsapp.exceptions import WhatsAppStorageError
-from camouchat_core import MessageProtocol , StorageProtocol
+from camouchat_core import MessageProtocol, StorageProtocol
 from .models import Base, Message
 from ..logger import w_logger
 
@@ -153,7 +153,9 @@ class SQLAlchemyStorage(StorageProtocol):
     async def create_table(self, **kwargs) -> None:
         """Create tables if not exists."""
         if not self._engine:
-            raise WhatsAppStorageError("Database not initialized. Call init_db() first.")
+            raise WhatsAppStorageError(
+                "Database not initialized. Call init_db() first."
+            )
 
         try:
             async with self._engine.begin() as conn:  # type: ignore
@@ -208,7 +210,9 @@ class SQLAlchemyStorage(StorageProtocol):
         while self._running:
             try:
                 try:
-                    msg = await asyncio.wait_for(self.queue.get(), timeout=self.flush_interval)
+                    msg = await asyncio.wait_for(
+                        self.queue.get(), timeout=self.flush_interval
+                    )
                     if isinstance(msg, list):
                         batch.extend(msg)
                     else:
@@ -245,7 +249,9 @@ class SQLAlchemyStorage(StorageProtocol):
 
         self.log.debug(f"Enqueued {len(msgs)} messages for insertion.")
 
-    async def _insert_batch_internally(self, msgs: Sequence[MessageProtocol], **kwargs) -> None:
+    async def _insert_batch_internally(
+        self, msgs: Sequence[MessageProtocol], **kwargs
+    ) -> None:
         """Insert batch of messages into database."""
         if not self._session_factory:
             raise WhatsAppStorageError("Database not initialized.")
@@ -290,7 +296,9 @@ class SQLAlchemyStorage(StorageProtocol):
                     except IntegrityError:
                         continue  # Skip duplicate
                     except Exception as e:
-                        self.log.warning(f"Failed to insert message {model.id_serialized}: {e}")
+                        self.log.warning(
+                            f"Failed to insert message {model.id_serialized}: {e}"
+                        )
 
                 self.log.debug(
                     f"Inserted {success_count}/{len(message_models)} messages (some duplicates)."
@@ -384,7 +392,12 @@ class SQLAlchemyStorage(StorageProtocol):
         session_factory = self._get_session_factory()
         async with session_factory() as session:
             try:
-                stmt = select(Message).order_by(Message.id.desc()).limit(limit).offset(offset)
+                stmt = (
+                    select(Message)
+                    .order_by(Message.id.desc())
+                    .limit(limit)
+                    .offset(offset)
+                )
                 result = await session.execute(stmt)
                 messages = result.scalars().all()
                 return [msg.to_dict() for msg in messages]
@@ -392,7 +405,9 @@ class SQLAlchemyStorage(StorageProtocol):
                 self.log.error(f"Async get all messages failed: {e}")
                 return []
 
-    async def get_messages_by_chat(self, chat_id: str, **kwargs) -> List[Dict[str, Any]]:
+    async def get_messages_by_chat(
+        self, chat_id: str, **kwargs
+    ) -> List[Dict[str, Any]]:
         """Get messages filtered by chat id (or HMAC digest if encryption is enabled)."""
         if not self._session_factory:
             return []
@@ -415,7 +430,9 @@ class SQLAlchemyStorage(StorageProtocol):
                 self.log.error(f"Get messages by chat failed: {e}")
                 return []
 
-    async def get_messages_by_ids_async(self, message_ids: list[str]) -> List[Dict[str, Any]]:
+    async def get_messages_by_ids_async(
+        self, message_ids: list[str]
+    ) -> List[Dict[str, Any]]:
         """Retrieve specific messages by their serialized IDs."""
         if not self._session_factory or not message_ids:
             return []
@@ -489,7 +506,7 @@ class SQLAlchemyStorage(StorageProtocol):
             rows = await storage.get_decrypted_messages_async(key)
         """
         import base64 as _b64
-        from camouchat.Encryption import MessageDecryptor
+        from camouchat_core import MessageDecryptor
 
         rows = await self.get_all_messages_async(limit=limit, offset=offset)
 
@@ -510,7 +527,9 @@ class SQLAlchemyStorage(StorageProtocol):
                         nonce_bytes, cipher_bytes, msg_id or None
                     )
                 except Exception as e:
-                    self.log.warning(f"Failed to decrypt message {row.get('id_serialized')}: {e}")
+                    self.log.warning(
+                        f"Failed to decrypt message {row.get('id_serialized')}: {e}"
+                    )
                     out["body"] = "<decryption failed>"
 
             result.append(out)

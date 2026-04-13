@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from queue import Queue
 from typing import List, Optional, TypeVar, Sequence
 
-from camouchat_core import ChatProtocol , MessageProtocol
+from camouchat_core import ChatProtocol, MessageProtocol
 
 from camouchat_whatsapp.exceptions import MessageFilterError
 
@@ -92,7 +92,9 @@ class MessageFilter:
         for m in msgs:
             mi: MessageProtocol = m
             if mi.from_chat != m0.from_chat:
-                raise MessageFilterError("MessageFilter.apply expects messages from a single chat")
+                raise MessageFilterError(
+                    "MessageFilter.apply expects messages from a single chat"
+                )
 
         chat = m0.from_chat
         chat_key = chat.id_serialized if not isinstance(chat, str) else chat

@@ -19,6 +19,7 @@ class WhatsAppError(CamouChatError):
 
 class MessageFilterError(WhatsAppError):
     """Message filters Error"""
+
     pass
 
 

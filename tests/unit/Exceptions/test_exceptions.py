@@ -1,8 +1,7 @@
-from camouchat.Exceptions import (
+from camouchat_whatsapp.exceptions import (
     ChatNotFoundError,
     ChatClickError,
     MessageNotFoundError,
-    AuthenticationError,
 )
 
 import pytest
@@ -26,11 +25,4 @@ def test_message_not_found_error():
     """Test MessageNotFoundError can be raised and caught."""
     with pytest.raises(MessageNotFoundError) as exc_info:
         raise MessageNotFoundError("test")
-    assert str(exc_info.value) == "test"
-
-
-def test_authentication_error():
-    """Test AuthenticationError can be raised and caught."""
-    with pytest.raises(AuthenticationError) as exc_info:
-        raise AuthenticationError("test")
     assert str(exc_info.value) == "test"

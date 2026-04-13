@@ -28,7 +28,9 @@ class Message(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Message identification
-    id_serialized: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    id_serialized: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )
 
     # Message content
     body: Mapped[str] = mapped_column(Text, nullable=True)
@@ -37,7 +39,9 @@ class Message(Base):
     fromMe: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Chat relationship
-    chat_id: Mapped[str] = mapped_column(String(255), nullable=False, default="", index=True)
+    chat_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="", index=True
+    )
 
     # Extra API metadata
     meta_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)

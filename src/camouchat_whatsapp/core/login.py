@@ -21,8 +21,11 @@ from playwright.async_api import (
 from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
+
 # Todo, add logger later
 from camouchat_whatsapp.logger import w_logger
+
+
 class Login(LoginProtocol):
     """Handles WhatsApp Web authentication via QR code or phone number."""
 

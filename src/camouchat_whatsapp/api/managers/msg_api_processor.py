@@ -22,7 +22,7 @@ from camouchat_core import MessageProcessorProtocol, StorageProtocol
 from camouchat_whatsapp.NoOpPattern import NoOpMessageFilter, NoOpStorage
 
 # Todo , Add logger later
-from camouchat_whatsapp.logger import w_logger # Temp solution
+from camouchat_whatsapp.logger import w_logger  # Temp solution
 from camouchat_whatsapp.filters.message_filter import MessageFilter
 from camouchat_whatsapp.api.models import ChatModelAPI, MessageModelAPI
 from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
@@ -46,11 +46,11 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
     """
 
     def __init__(
-            self,
-            bridge: WapiWrapper,
-            log: Optional[Union[Logger, LoggerAdapter]] = None,
-            storage_obj: Optional[StorageProtocol] = None,
-            filter_obj: Optional[MessageFilter] = None,
+        self,
+        bridge: WapiWrapper,
+        log: Optional[Union[Logger, LoggerAdapter]] = None,
+        storage_obj: Optional[StorageProtocol] = None,
+        filter_obj: Optional[MessageFilter] = None,
     ) -> None:
         self.page = None
         self.ui_config = None
@@ -94,14 +94,18 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
           4. _drain_loop dequeues → RAM fetch → MessageModelAPI → handlers.
         """
         if self._bridge_active:
-            self.log.warning("MessageApiManager: bridge already active, skipping re-setup.")
+            self.log.warning(
+                "MessageApiManager: bridge already active, skipping re-setup."
+            )
             return
 
         await self._bridge.setup_message_bridge()
         self._drain_task = asyncio.ensure_future(self._drain_loop())
         self._poll_task = asyncio.ensure_future(self._poll_loop())
         self._bridge_active = True
-        self.log.info("MessageApiManager: DOM bridge active, ready to receive messages.")
+        self.log.info(
+            "MessageApiManager: DOM bridge active, ready to receive messages."
+        )
 
     async def _poll_loop(self) -> None:
         """
@@ -149,7 +153,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
                 WAJS_Scripts.get_message_by_id(id_serialized)
             )
             if not raw:
-                self.log.warning(f"MessageApiManager: RAM lookup empty for id={id_serialized!r}")
+                self.log.warning(
+                    f"MessageApiManager: RAM lookup empty for id={id_serialized!r}"
+                )
                 return
 
             # filters own messages: WPP fires chat.new_message for outgoing messages too.
@@ -160,7 +166,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
             #     (WA Web received it from the server — it traveled the wire)
             id_str = raw.get("id_serialized") or ""
             if id_str.startswith("true_") and not raw.get("recvFresh"):
-                self.log.debug(f"MessageApiManager: skipping own sent message id={id_serialized!r}")
+                self.log.debug(
+                    f"MessageApiManager: skipping own sent message id={id_serialized!r}"
+                )
                 return
 
             # ciphertext = The message arrived on the wire before WA finished E2E decryption.
@@ -187,7 +195,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
                         f"raised on id={id_serialized!r}: {exc}"
                     )
         except Exception as exc:
-            self.log.error(f"MessageApiManager: error processing id={id_serialized!r}: {exc}")
+            self.log.error(
+                f"MessageApiManager: error processing id={id_serialized!r}: {exc}"
+            )
 
     async def stop_bridge(self) -> None:
         """
@@ -211,14 +221,14 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
     # ──────────────────────────────────────────────
 
     async def get_messages(
-            self,
-            chat_id: str,
-            count: int = 50,
-            direction: str = "before",
-            only_unread: bool = False,
-            media: Optional[str] = None,
-            include_calls: bool = False,
-            anchor_msg_id: Optional[str] = None,
+        self,
+        chat_id: str,
+        count: int = 50,
+        direction: str = "before",
+        only_unread: bool = False,
+        media: Optional[str] = None,
+        include_calls: bool = False,
+        anchor_msg_id: Optional[str] = None,
     ) -> Sequence[MessageModelAPI]:
         """
         [Type: RAM]
@@ -250,22 +260,24 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         return [MessageModelAPI.from_dict(r) for r in (raw_list or [])]
 
     async def fetch_messages(
-            self, chat: ChatModelAPI, **kwargs
+        self, chat: ChatModelAPI, **kwargs
     ) -> Sequence[MessageModelAPI]:
         """[Type: RAM] Fetch messages, fulfilling interface via generic storage pass."""
 
         if chat.id_serialized is None:
-            ValueError("chat.id_serialized is None")
+            raise ValueError("chat.id_serialized is None")
 
         count = kwargs.get("count", 0)
-        chat_id = chat.id_serialized
+        chat_id: str = chat.id_serialized
         direction = kwargs.get("direction", "before")
         only_unread = kwargs.get("only_unread", False)
         media = kwargs.get("media", None)
         include_calls = kwargs.get("include_calls", False)
         anchor_msg_id = kwargs.get("anchor_msg_id", None)
 
-        return await self.get_messages(chat_id, count, direction, only_unread, media, include_calls, anchor_msg_id)
+        return await self.get_messages(
+            chat_id, count, direction, only_unread, media, include_calls, anchor_msg_id
+        )
 
     async def get_message_by_id(self, msg_id: str) -> Optional[MessageModelAPI]:
         """
@@ -296,9 +308,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         return await self.get_messages(chat_id, count=-1, only_unread=True)
 
     async def extract_media(
-            self,
-            message: MessageModelAPI,
-            save_path: str,
+        self,
+        message: MessageModelAPI,
+        save_path: str,
     ) -> Dict[str, Any]:
         """
         [Type: NETWORK]
@@ -327,14 +339,18 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         }
 
         if not message.directPath:
-            result["error"] = "Message has no directPath — not a downloadable media message."
+            result["error"] = (
+                "Message has no directPath — not a downloadable media message."
+            )
             return result
 
         if not msg_id:
             result["error"] = "no id_serialized — cannot use download_media."
             return result
 
-        js_result = await self._bridge._evaluate_stealth(WAJS_Scripts.download_media(msg_id=msg_id))
+        js_result = await self._bridge._evaluate_stealth(
+            WAJS_Scripts.download_media(msg_id=msg_id)
+        )
 
         if not js_result:
             result["error"] = "download_media returned None — media unavailable."
@@ -352,9 +368,13 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         raw_bytes = base64.b64decode(b64)
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         Path(save_path).write_bytes(raw_bytes)
-        self.log.info(f"extract_media: [{media_type}] {len(raw_bytes):,} bytes → {save_path}")
+        self.log.info(
+            f"extract_media: [{media_type}] {len(raw_bytes):,} bytes → {save_path}"
+        )
 
-        result.update({"success": True, "size_bytes": len(raw_bytes), "path": save_path})
+        result.update(
+            {"success": True, "size_bytes": len(raw_bytes), "path": save_path}
+        )
         return result
 
     # ──────────────────────────────────────────────
@@ -362,9 +382,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
     # ──────────────────────────────────────────────
 
     async def indexdb_get_messages(
-            self,
-            min_row_id: int,
-            limit: int = 50,
+        self,
+        min_row_id: int,
+        limit: int = 50,
     ) -> List[MessageModelAPI]:
         """
         [Type: INDEX DB]

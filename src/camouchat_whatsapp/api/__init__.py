@@ -13,10 +13,18 @@ from .models import ChatModelAPI, MessageModelAPI
 from .wa_js import WapiWrapper
 from camouchat_whatsapp.logger import w_logger
 
-__all__ = ["WapiSession", "ChatApiManager", "MessageApiManager", "WapiWrapper", "ChatModelAPI", "MessageModelAPI"]
+__all__ = [
+    "WapiSession",
+    "ChatApiManager",
+    "MessageApiManager",
+    "WapiWrapper",
+    "ChatModelAPI",
+    "MessageModelAPI",
+]
 
 
 # todo add logger later
+
 
 class WapiSession:
     """

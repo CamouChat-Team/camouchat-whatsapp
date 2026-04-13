@@ -11,12 +11,14 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "camouchat-browser",
     "camouchat-core",
-    "camoufox>=0.4.11",
     "filelock>=3.25.2",
     "playwright>=1.58.0",
     "pyperclip>=1.11.0",
     "sqlalchemy>=2.0.49",
 ]
+
+[tool.deptry]
+per_rule_ignores = { DEP002 = "aiosqlite", DEP003 = "camouchat_whatsapp" }
 
 [build-system]
 requires = ["uv_build>=0.10.7,<0.11.0"]
@@ -35,4 +37,6 @@ dev = [
     "pytest-cov>=7.1.0",
     "pytest-mock>=3.15.1",
     "ruff>=0.15.10",
+    "types-pyperclip>=1.9.0.20241221",
+    "deptry>=0.25.1",
 ]
