@@ -18,16 +18,18 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from camouchat.BrowserManager import (
+from camouchat_browser import (
     BrowserConfig,
-    Platform,
     BrowserForge,
     ProfileManager,
     CamoufoxBrowser,
 )
-from camouchat.StorageDB import StorageType
-from camouchat.WhatsApp import Login, WebSelectorConfig
-from camouchat.WhatsApp.api.wa_js.wajs_wrapper import WapiWrapper
+from camouchat_core import Platform
+from camouchat_whatsapp import (
+    Login,
+    WebSelectorConfig,
+    WapiWrapper
+)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIG — Fill these in.  No personal data is committed; use your own values.
@@ -613,8 +615,7 @@ async def main() -> None:
     pm = ProfileManager()
     profile = pm.create_profile(
         platform=Platform.WHATSAPP,
-        profile_id=str(CFG.get("profile_id", "Work")),
-        storage_type=StorageType.SQLITE,
+        profile_id=str(CFG.get("profile_id", "Work"))
     )
 
     config = BrowserConfig.from_dict(

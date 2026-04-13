@@ -1,26 +1,27 @@
 import asyncio
 import traceback
 
-from camouchat.BrowserManager import (
+from camouchat_browser import (
     BrowserConfig,
     BrowserForge,
     CamoufoxBrowser,
-    Platform,
     ProfileManager,
 )
-from camouchat.StorageDB import SQLAlchemyStorage, StorageType
-from camouchat.WhatsApp import Login, WebSelectorConfig
-from camouchat.WhatsApp.api import WapiSession
-from camouchat.WhatsApp.api.models import MessageModelAPI
-from camouchat.WhatsApp.decorator import msg_event_hook
+from camouchat_core import Platform
+from camouchat_whatsapp import (
+    Login,
+    MessageModelAPI,
+    SQLAlchemyStorage,
+    WapiSession,
+    WebSelectorConfig,
+    on_newMsg,
+)
 
 
 async def main():
     # ── Setup Storage (Once) ───────────────────────────────────────────────
     pm = ProfileManager()
-    profile = pm.create_profile(
-        platform=Platform.WHATSAPP, profile_id="Work", storage_type=StorageType.SQLITE
-    )
+    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
     # Initialize storage once outside the loop
     storage = SQLAlchemyStorage.from_profile(profile=profile, queue=asyncio.Queue())
     await storage.start()
@@ -46,7 +47,7 @@ async def main():
     # ── Event Hook ─────────────────────────────────────────────────────────
     wapi = WapiSession(page=page)
 
-    @msg_event_hook(wapi_session=wapi)
+    @on_newMsg(wapi_session=wapi)
     async def new_msg(msg: MessageModelAPI):
         print("New Msg Arrived with type--")
         print(msg)
@@ -57,7 +58,9 @@ async def main():
     await new_msg()
 
     try:
-        print("\n>>> Listening for messages... Press Ctrl+C to stop and view data from DB.")
+        print(
+            "\n>>> Listening for messages... Press Ctrl+C to stop and view data from DB."
+        )
         while True:
             await asyncio.sleep(1)
     except asyncio.CancelledError:

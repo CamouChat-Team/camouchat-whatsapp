@@ -1,19 +1,21 @@
 import asyncio
 import base64
 import json
+import os
 import time
 import uuid
-import os
 from logging import Logger, LoggerAdapter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from playwright.async_api import Page
 
-# Todo , add logger later
-from .wajs_scripts import WAJS_Scripts
 from camouchat_whatsapp.exceptions import WAJSError
 from camouchat_whatsapp.logger import w_logger
+
+# Todo , add logger later
+from .wajs_scripts import WAJS_Scripts
+
 
 class WapiWrapper:
     """
@@ -123,7 +125,9 @@ class WapiWrapper:
         property (`window.__react_devtools_hook`) and deletes `window.WPP`
         to evade Meta's integrity.js scanners.
         """
-        js_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "wppconnect-wa.js"))
+        js_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "wppconnect-wa.js")
+        )
         with open(js_path, "r", encoding="utf-8") as f:
             js_code = f.read()
 
@@ -135,7 +139,9 @@ class WapiWrapper:
         while (time.time() - start) * 1000 < timeout_ms:
             try:
                 if not injected:
-                    has_global = await self.page.evaluate("typeof window.WPP !== 'undefined'")
+                    has_global = await self.page.evaluate(
+                        "mw:typeof window.WPP !== 'undefined'"
+                    )
                     if not has_global:
                         try:
                             await self.page.evaluate(
@@ -158,7 +164,7 @@ class WapiWrapper:
 
                 if injected:
                     is_ready = await self.page.evaluate(
-                        "window.WPP && window.WPP.isReady === true"
+                        "mw:window.WPP && window.WPP.isReady === true"
                     )
                     if is_ready:
                         # Hide WPP under a non-enumerable, non-configurable,
@@ -166,7 +172,7 @@ class WapiWrapper:
                         #   - Object.keys(window)   → WPP invisible
                         #   - Object.defineProperty  → cannot redefine
                         #   - window.__react_devtools_hook = null → rejected
-                        await self.page.evaluate("""(() => {
+                        await self.page.evaluate("""mw:(() => {
                             Object.defineProperty(window, "__react_devtools_hook", {
                                 value: window.WPP,
                                 enumerable: false,
@@ -178,7 +184,7 @@ class WapiWrapper:
 
                         # Confirm WPP is gone from enumerable keys and
                         # the hidden handle is alive and non-null.
-                        sweep_ok = await self.page.evaluate("""(() => {
+                        sweep_ok = await self.page.evaluate("""mw:(() => {
                             const keys = Object.keys(window);
                             const wppGone = !keys.includes('WPP');
                             const handleOk = typeof window.__react_devtools_hook === 'object'
@@ -241,7 +247,9 @@ class WapiWrapper:
         Object.keys(window), for..in enumeration, and WhatsApp integrity scans.
         """
         if self._bridge_active:
-            self.log.warning("setup_message_bridge: bridge already active, skipping re-register.")
+            self.log.warning(
+                "setup_message_bridge: bridge already active, skipping re-register."
+            )
             return
 
         bridge_key = self._get_bridge_key()  # random per session, e.g. '_c203a2bd9fdb1'
@@ -250,7 +258,7 @@ class WapiWrapper:
         self._queue_key = queue_key  # stored so poll_message_queue can use it
 
         # Define hidden queue + guard in Main World — non-enumerable so scanners can't see them.
-        await self.page.evaluate(f"""(() => {{
+        await self.page.evaluate(f"""mw:(() => {{
             Object.defineProperty(window, '{queue_key}', {{
                 value: [],
                 writable: true,
@@ -266,7 +274,7 @@ class WapiWrapper:
         }})()""")
 
         # Register wpp.on listener — entirely in Main World via mw:.
-        await self.page.evaluate(f"""(async () => {{
+        await self.page.evaluate(f"""mw:(async () => {{
             const wpp = window.__react_devtools_hook;
             if (!wpp) {{
                 console.warn('CamouBridge: WPP handle missing.');
@@ -301,7 +309,7 @@ class WapiWrapper:
         try:
             qk = self._queue_key
             ids = await self.page.evaluate(
-                f"(() => {{ const q = window['{qk}'] || []; "
+                f"mw:(() => {{ const q = window['{qk}'] || []; "
                 f"window['{qk}'] = []; return q; }})()"
             )
             return ids or []
@@ -356,7 +364,7 @@ class WapiWrapper:
         # Clear hidden properties via mw: — they're non-configurable so we just empty the queue.
         qk = getattr(self, "_queue_key", None)
         if qk:
-            await self.page.evaluate(f"window['{qk}'] = []")
+            await self.page.evaluate(f"mw:window['{qk}'] = []")
 
         self._bridge_active = False
         self._bridge_key = None
@@ -481,7 +489,7 @@ class WapiWrapper:
             safe_msg = json.dumps(message)
             safe_options = json.dumps(options or {"waitForAck": False})
             await self.page.evaluate(
-                f"(() => {{"
+                f"mw:(() => {{"
                 f"  const wpp = window.__react_devtools_hook;"
                 f"  setTimeout(() => wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_options}).catch(() => null), 0);"
                 f"}})()"
@@ -503,7 +511,9 @@ class WapiWrapper:
     async def mark_is_composing(self, chat_id: str, duration_ms: int = 3000) -> bool:
         """Sends typing state to the chat."""
         try:
-            res = await self._evaluate_stealth(WAJS_Scripts.mark_is_composing(chat_id, duration_ms))
+            res = await self._evaluate_stealth(
+                WAJS_Scripts.mark_is_composing(chat_id, duration_ms)
+            )
             return bool(res)
         except Exception as e:
             self.log.warning(f"mark_is_composing failed: {e}")
@@ -580,7 +590,9 @@ class WapiWrapper:
                 f"decrypt_media: Cache miss for {direct_path!r} — "
                 f"falling back to CDN download via wpp.chat.downloadMedia() [NETWORK]"
             )
-            b64 = await self._evaluate_stealth(WAJS_Scripts.download_media(msg_id=msg_id))
+            b64 = await self._evaluate_stealth(
+                WAJS_Scripts.download_media(msg_id=msg_id)
+            )
 
         if not b64:
             return None
@@ -590,7 +602,9 @@ class WapiWrapper:
         if save_path:
             Path(save_path).parent.mkdir(parents=True, exist_ok=True)
             Path(save_path).write_bytes(raw_bytes)
-            self.log.info(f"decrypt_media: Saved {len(raw_bytes):,} bytes → {save_path}")
+            self.log.info(
+                f"decrypt_media: Saved {len(raw_bytes):,} bytes → {save_path}"
+            )
 
         return raw_bytes
 
@@ -700,7 +714,9 @@ class WapiWrapper:
         )
 
         try:
-            js_result = await self._evaluate_stealth(WAJS_Scripts.download_media(msg_id=msg_id))
+            js_result = await self._evaluate_stealth(
+                WAJS_Scripts.download_media(msg_id=msg_id)
+            )
         except Exception as e:
             result_dict["error"] = f"JS error: {e}"
             self.log.warning(f"extract_media: {result_dict['error']}")
@@ -713,8 +729,12 @@ class WapiWrapper:
 
         # Unpack structured result {b64, isCached, latencyMs}
         b64 = js_result.get("b64") if isinstance(js_result, dict) else js_result
-        is_cached = js_result.get("isCached", False) if isinstance(js_result, dict) else False
-        js_latency_ms = js_result.get("latencyMs", 0.0) if isinstance(js_result, dict) else 0.0
+        is_cached = (
+            js_result.get("isCached", False) if isinstance(js_result, dict) else False
+        )
+        js_latency_ms = (
+            js_result.get("latencyMs", 0.0) if isinstance(js_result, dict) else 0.0
+        )
 
         if not b64:
             result_dict["error"] = f"null blob for {msg_id!r}."
@@ -782,7 +802,9 @@ class WapiWrapper:
         Args:
             newsletter_id: The @newsletter JID e.g. '120363xxxxx@newsletter'.
         """
-        return await self._evaluate_stealth(WAJS_Scripts.newsletter_follow(newsletter_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.newsletter_follow(newsletter_id)
+        )
 
     async def newsletter_unfollow(self, newsletter_id: str) -> bool:
         """
@@ -791,7 +813,9 @@ class WapiWrapper:
         Args:
             newsletter_id: The @newsletter JID e.g. '120363xxxxx@newsletter'.
         """
-        return await self._evaluate_stealth(WAJS_Scripts.newsletter_unfollow(newsletter_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.newsletter_unfollow(newsletter_id)
+        )
 
     async def newsletter_mute(self, newsletter_id: str) -> Any:
         """Mute notifications for a WhatsApp Channel."""
@@ -799,7 +823,9 @@ class WapiWrapper:
 
     async def newsletter_unmute(self, newsletter_id: str) -> Any:
         """Unmute notifications for a WhatsApp Channel."""
-        return await self._evaluate_stealth(WAJS_Scripts.newsletter_unmute(newsletter_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.newsletter_unmute(newsletter_id)
+        )
 
     # ═══════════════════════════════════════════════════════════
     # READ-LEVEL — DATA & INTROSPECTION
@@ -933,7 +959,9 @@ class WapiWrapper:
             video     (bool)
             documents (bool)
         """
-        return await self._evaluate_stealth(WAJS_Scripts.conn_get_auto_download_settings())
+        return await self._evaluate_stealth(
+            WAJS_Scripts.conn_get_auto_download_settings()
+        )
 
     async def conn_get_history_sync_progress(self) -> Any:
         """
@@ -941,7 +969,9 @@ class WapiWrapper:
         Returns: dict|None — sync progress object, or None if no sync is in progress.
                  Relevant only during the first few minutes of a new device link.
         """
-        return await self._evaluate_stealth(WAJS_Scripts.conn_get_history_sync_progress())
+        return await self._evaluate_stealth(
+            WAJS_Scripts.conn_get_history_sync_progress()
+        )
 
     async def conn_needs_update(self) -> bool:
         """
@@ -1000,7 +1030,9 @@ class WapiWrapper:
             lid             (dict) — {server, user, _serialized} — linked device ID
         Returns None if the number does not have WhatsApp.
         """
-        return await self._evaluate_stealth(WAJS_Scripts.contact_query_exists(contact_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.contact_query_exists(contact_id)
+        )
 
     async def contact_get_profile_picture_url(self, contact_id: str) -> Any:
         """
@@ -1028,14 +1060,18 @@ class WapiWrapper:
         Returns: dict with business fields (address, email, website, category, description)
                  None if the contact is not a Business account.
         """
-        return await self._evaluate_stealth(WAJS_Scripts.contact_get_business_profile(contact_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.contact_get_business_profile(contact_id)
+        )
 
     async def contact_get_common_groups(self, contact_id: str) -> Any:
         """
         Type: NETWORK ⚠️ — XMPP query for shared group list.
         Returns: list of group ID strings e.g. ['120363401916939000@g.us', ...]
         """
-        return await self._evaluate_stealth(WAJS_Scripts.contact_get_common_groups(contact_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.contact_get_common_groups(contact_id)
+        )
 
     # ─────────────────────────────────────────────
     # 9. GROUP (READ)
@@ -1086,7 +1122,9 @@ class WapiWrapper:
             isAdmin       (bool)
             isSuperAdmin  (bool)
         """
-        return await self._evaluate_stealth(WAJS_Scripts.group_get_participants(group_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_get_participants(group_id)
+        )
 
     async def group_get_invite_code(self, group_id: str) -> Any:
         """
@@ -1094,7 +1132,9 @@ class WapiWrapper:
         Returns: str — the invite code portion of the link
                  (full link = 'https://chat.whatsapp.com/<invite_code>')
         """
-        return await self._evaluate_stealth(WAJS_Scripts.group_get_invite_code(group_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_get_invite_code(group_id)
+        )
 
     async def group_get_info_from_invite_code(self, invite_code: str) -> Any:
         """
@@ -1117,7 +1157,9 @@ class WapiWrapper:
             addedBy        (str) — who added them (if via invite link)
             requestTime    (int) — Unix timestamp of request
         """
-        return await self._evaluate_stealth(WAJS_Scripts.group_get_membership_requests(group_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_get_membership_requests(group_id)
+        )
 
     async def group_get_past_participants(self, group_id: str) -> Any:
         """
@@ -1126,7 +1168,9 @@ class WapiWrapper:
             id_serialized  (str) — their WhatsApp ID
             leaveTs        (int) — Unix timestamp when they left
         """
-        return await self._evaluate_stealth(WAJS_Scripts.group_get_past_participants(group_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_get_past_participants(group_id)
+        )
 
     async def group_i_am_admin(self, group_id: str) -> bool:
         """
@@ -1140,7 +1184,9 @@ class WapiWrapper:
         Type: RAM (GroupMetadataStore).
         Returns: bool — True if you are the group creator (super-admin).
         """
-        return await self._evaluate_stealth(WAJS_Scripts.group_i_am_super_admin(group_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_i_am_super_admin(group_id)
+        )
 
     async def group_get_size_limit(self) -> Any:
         """
@@ -1167,7 +1213,9 @@ class WapiWrapper:
         Type: RAM (BlocklistStore — O(1) set lookup).
         Returns: bool — True if the contact_id is in your block list.
         """
-        return await self._evaluate_stealth(WAJS_Scripts.blocklist_is_blocked(contact_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.blocklist_is_blocked(contact_id)
+        )
 
     # ─────────────────────────────────────────────
     # 11. STATUS / STORIES (READ)
@@ -1276,11 +1324,15 @@ class WapiWrapper:
 
     async def community_get_subgroups(self, community_id: str) -> Any:
         """Child group chats of a Community."""
-        return await self._evaluate_stealth(WAJS_Scripts.community_get_subgroups(community_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.community_get_subgroups(community_id)
+        )
 
     async def community_get_participants(self, community_id: str) -> Any:
         """All members across a Community."""
-        return await self._evaluate_stealth(WAJS_Scripts.community_get_participants(community_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.community_get_participants(community_id)
+        )
 
     async def community_get_announcement_group(self, community_id: str) -> Any:
         """The admin broadcast/announcement group of a Community."""
@@ -1322,11 +1374,15 @@ class WapiWrapper:
 
     async def contact_subscribe_presence(self, contact_id: str) -> Any:
         """Start receiving real-time online/typing presence events for a contact."""
-        return await self._evaluate_stealth(WAJS_Scripts.contact_subscribe_presence(contact_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.contact_subscribe_presence(contact_id)
+        )
 
     async def contact_unsubscribe_presence(self, contact_id: str) -> Any:
         """Stop receiving presence events for a contact."""
-        return await self._evaluate_stealth(WAJS_Scripts.contact_unsubscribe_presence(contact_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.contact_unsubscribe_presence(contact_id)
+        )
 
     async def contact_save(self, contact_id: str, name: str) -> Any:
         """Save or update the display name for a contact."""
@@ -1346,27 +1402,37 @@ class WapiWrapper:
 
     async def group_create(self, name: str, participants: List[str]) -> Any:
         """Create a new group chat."""
-        return await self._evaluate_stealth(WAJS_Scripts.group_create(name, participants))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_create(name, participants)
+        )
 
-    async def group_add_participants(self, group_id: str, participants: List[str]) -> Any:
+    async def group_add_participants(
+        self, group_id: str, participants: List[str]
+    ) -> Any:
         """Add members to a group."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_add_participants(group_id, participants)
         )
 
-    async def group_remove_participants(self, group_id: str, participants: List[str]) -> Any:
+    async def group_remove_participants(
+        self, group_id: str, participants: List[str]
+    ) -> Any:
         """Remove members from a group."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_remove_participants(group_id, participants)
         )
 
-    async def group_promote_participants(self, group_id: str, participants: List[str]) -> Any:
+    async def group_promote_participants(
+        self, group_id: str, participants: List[str]
+    ) -> Any:
         """Promote members to admin."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_promote_participants(group_id, participants)
         )
 
-    async def group_demote_participants(self, group_id: str, participants: List[str]) -> Any:
+    async def group_demote_participants(
+        self, group_id: str, participants: List[str]
+    ) -> Any:
         """Remove admin from members."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_demote_participants(group_id, participants)
@@ -1382,23 +1448,33 @@ class WapiWrapper:
 
     async def group_set_subject(self, group_id: str, name: str) -> Any:
         """Rename a group."""
-        return await self._evaluate_stealth(WAJS_Scripts.group_set_subject(group_id, name))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_set_subject(group_id, name)
+        )
 
     async def group_set_description(self, group_id: str, text: str) -> Any:
         """Set the group description."""
-        return await self._evaluate_stealth(WAJS_Scripts.group_set_description(group_id, text))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_set_description(group_id, text)
+        )
 
     async def group_revoke_invite_code(self, group_id: str) -> Any:
         """Revoke the current invite link and generate a new one."""
-        return await self._evaluate_stealth(WAJS_Scripts.group_revoke_invite_code(group_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.group_revoke_invite_code(group_id)
+        )
 
-    async def group_approve_membership(self, group_id: str, participants: List[str]) -> Any:
+    async def group_approve_membership(
+        self, group_id: str, participants: List[str]
+    ) -> Any:
         """Approve pending join requests."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_approve_membership(group_id, participants)
         )
 
-    async def group_reject_membership(self, group_id: str, participants: List[str]) -> Any:
+    async def group_reject_membership(
+        self, group_id: str, participants: List[str]
+    ) -> Any:
         """Reject pending join requests."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_reject_membership(group_id, participants)
@@ -1422,7 +1498,9 @@ class WapiWrapper:
 
     async def status_send_text(self, text: str, bg_color: Optional[str] = None) -> Any:
         """Post a text Status story."""
-        return await self._evaluate_stealth(WAJS_Scripts.status_send_text(text, bg_color))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.status_send_text(text, bg_color)
+        )
 
     async def status_send_read(self, msg_id: str) -> Any:
         """Mark a Status story as viewed."""
@@ -1466,7 +1544,9 @@ class WapiWrapper:
 
     async def privacy_set_read_receipts(self, value: str) -> Any:
         """Enable/disable blue ticks. Values: 'all'|'none'."""
-        return await self._evaluate_stealth(WAJS_Scripts.privacy_set_read_receipts(value))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.privacy_set_read_receipts(value)
+        )
 
     async def privacy_set_add_group(self, value: str) -> Any:
         """Who can add you to groups."""
@@ -1490,7 +1570,9 @@ class WapiWrapper:
 
     async def labels_apply(self, chat_id: str, label_ids: List[str]) -> Any:
         """Apply labels to a chat."""
-        return await self._evaluate_stealth(WAJS_Scripts.labels_apply(chat_id, label_ids))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.labels_apply(chat_id, label_ids)
+        )
 
     # ─────────────────────────────────────────────
     # CALL (ACTIONS)
@@ -1498,7 +1580,9 @@ class WapiWrapper:
 
     async def call_offer(self, contact_id: str, is_video: bool = False) -> Any:
         """Initiate a voice or video call."""
-        return await self._evaluate_stealth(WAJS_Scripts.call_offer(contact_id, is_video))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.call_offer(contact_id, is_video)
+        )
 
     async def call_accept(self, call_id: str) -> Any:
         """Accept an incoming call."""
@@ -1518,19 +1602,27 @@ class WapiWrapper:
 
     async def community_create(self, name: str, group_ids: List[str]) -> Any:
         """Create a new Community with existing groups."""
-        return await self._evaluate_stealth(WAJS_Scripts.community_create(name, group_ids))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.community_create(name, group_ids)
+        )
 
     async def community_deactivate(self, community_id: str) -> Any:
         """Deactivate / close a Community."""
-        return await self._evaluate_stealth(WAJS_Scripts.community_deactivate(community_id))
+        return await self._evaluate_stealth(
+            WAJS_Scripts.community_deactivate(community_id)
+        )
 
-    async def community_add_subgroups(self, community_id: str, group_ids: List[str]) -> Any:
+    async def community_add_subgroups(
+        self, community_id: str, group_ids: List[str]
+    ) -> Any:
         """Add groups to an existing Community."""
         return await self._evaluate_stealth(
             WAJS_Scripts.community_add_subgroups(community_id, group_ids)
         )
 
-    async def community_remove_subgroups(self, community_id: str, group_ids: List[str]) -> Any:
+    async def community_remove_subgroups(
+        self, community_id: str, group_ids: List[str]
+    ) -> Any:
         """Remove groups from a Community."""
         return await self._evaluate_stealth(
             WAJS_Scripts.community_remove_subgroups(community_id, group_ids)

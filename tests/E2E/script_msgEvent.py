@@ -11,8 +11,13 @@ from camouchat_browser import (
     ProfileManager,
 )
 from camouchat_core import Platform
-from camouchat_whatsapp import FileTyped, MediaType
-from camouchat_whatsapp import Login, MediaController, WebSelectorConfig
+from camouchat_whatsapp import (
+    FileTyped,
+    Login,
+    MediaController,
+    MediaType,
+    WebSelectorConfig,
+)
 
 
 async def main():
@@ -41,7 +46,12 @@ async def main():
     await login.login(method=0)  # Auto Handles saved Persistence.
 
     # ── 4. Message event hook ───────────────────────────────────────────────────
-    from camouchat_whatsapp import WapiSession , MessageModelAPI , on_newMsg , InteractionController
+    from camouchat_whatsapp import (
+        InteractionController,
+        MessageModelAPI,
+        WapiSession,
+        on_newMsg,
+    )
 
     wapi = WapiSession(page=page)
     interaction = InteractionController(page=page, ui_config=ui, wapi=wapi)
@@ -65,9 +75,8 @@ async def main():
         if msg.body == "!ping":
             print(f"[*] Command triggered: !ping from {msg.jid_From}")
             # await replyObj.quote_only(message=msg)  # UI: Trigger the quote/reply bubble
-            await hum.send_api_text(
+            await interaction.send_api_text(
                 chat_id=msg.jid_From,
-                bridge=wapi.bridge,
                 text="**You have been Ponged!!!** \ud83c\udfd3\n_Reply from CamouChat Stealth Bridge_",
                 quoted_msg_id=msg.id_serialized,
             )
@@ -98,7 +107,7 @@ async def main():
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
                 text=f"\ud83d\udc64 *Identity Profile*\n\u2022 Name: {sender_name}\n\u2022 PushName: {push_name}",
-                quoted_msg_id=msg.id_serialized
+                quoted_msg_id=msg.id_serialized,
             )
 
         elif msg.body and msg.body.startswith("!echo "):
@@ -106,9 +115,9 @@ async def main():
             echo_text = msg.body.replace("!echo ", "")
             await interaction.send_text(
                 message=msg,
-                text=f"Echo: {echo_text}", # Type using manual/clipboard
+                text=f"Echo: {echo_text}",  # Type using manual/clipboard
                 quote=True,  # add quote using browser automation
-                send=True  # send to send text or not.
+                send=True,  # send to send text or not.
             )
 
         elif msg.body and msg.body == "!media":
@@ -172,7 +181,9 @@ async def main():
     # Keep the script running to listen for events
     await new_msg()
 
-    print("\n[\u2714] Hook active. Try sending !ping, !info, !me, or !echo <text> in WhatsApp.")
+    print(
+        "\n[\u2714] Hook active. Try sending !ping, !info, !me, or !echo <text> in WhatsApp."
+    )
     await asyncio.sleep(3600)  # 1 hour running.
 
 
