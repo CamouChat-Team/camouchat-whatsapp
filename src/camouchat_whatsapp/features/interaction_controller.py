@@ -16,7 +16,7 @@ from playwright.async_api import Page, ElementHandle, Locator
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 
 
-from camouchat_whatsapp.exceptions import InteractionControllerError
+from camouchat_whatsapp.exceptions import WhatsAppInteractionError
 from camouchat_core import InteractionControllerProtocol
 from camouchat_whatsapp.api import WapiSession
 from camouchat_whatsapp.api.models import MessageModelAPI
@@ -89,7 +89,7 @@ class InteractionController(InteractionControllerProtocol):
             self.log.debug("Msg Box Clicked.")
 
             if not chat_id:
-                raise InteractionControllerError("Could not determine active chat ID from bridge.")
+                raise WhatsAppInteractionError("Could not determine active chat ID from bridge.")
 
             # typing state
             if await bridge.mark_is_composing(chat_id=chat_id):
@@ -120,7 +120,7 @@ class InteractionController(InteractionControllerProtocol):
             return success
 
         except Exception as e:
-            raise InteractionControllerError(f"API Text typing failed: {e}") from e
+            raise WhatsAppInteractionError(f"API Text typing failed: {e}") from e
 
     # ----------------------------------------------------
 
@@ -138,18 +138,18 @@ class InteractionController(InteractionControllerProtocol):
             return success
 
         except PlaywrightTimeoutError as e:
-            raise InteractionControllerError("reply timed out while preparing input box") from e
+            raise WhatsAppInteractionError("reply timed out while preparing input box") from e
 
     async def quote(self, message: MessageModelAPI) -> bool:
         """Double-click the message container's side padding to trigger reply."""
         # ── Resolve data_id and direction ─────────────────────────────────────
         if not isinstance(message, MessageModelAPI):
-            raise InteractionControllerError(
+            raise WhatsAppInteractionError(
                 f"Unsupported message type: {type(message)}. Expected MessageModelAPI."
             )
 
         if not message.id_serialized:
-            raise InteractionControllerError("Message or data_id is missing.")
+            raise WhatsAppInteractionError("Message or data_id is missing.")
 
         data_id = str(message.id_serialized)
         from_me = self._message_from_me(message, data_id)
@@ -178,12 +178,12 @@ class InteractionController(InteractionControllerProtocol):
                 if attempt < retries:
                     await asyncio.sleep(delay)
                 else:
-                    raise InteractionControllerError(
+                    raise WhatsAppInteractionError(
                         f"side_edge_click failed after {retries} attempts: "
                         f"'{data_id}' never appeared in DOM."
                     )
 
-            except InteractionControllerError:
+            except WhatsAppInteractionError:
                 raise
 
             except Exception as e:
@@ -191,9 +191,9 @@ class InteractionController(InteractionControllerProtocol):
                 if attempt < retries:
                     await asyncio.sleep(delay)
                 else:
-                    raise InteractionControllerError(f"Unexpected error in side_edge_click: {e}") from e
+                    raise WhatsAppInteractionError(f"Unexpected error in side_edge_click: {e}") from e
 
-        raise InteractionControllerError("side_edge_click failed after max attempts.")
+        raise WhatsAppInteractionError("side_edge_click failed after max attempts.")
 
     async def focus_input(
         self, source: ElementHandle | Locator | None = None, **kwargs
@@ -201,7 +201,7 @@ class InteractionController(InteractionControllerProtocol):
         """Focus the WhatsApp message input or a provided input target."""
         target = source or self.ui_config.message_box()
         if not target:
-            raise InteractionControllerError("Input Element not found.")
+            raise WhatsAppInteractionError("Input Element not found.")
 
         await target.click(timeout=5000)
         return target
@@ -260,7 +260,7 @@ class InteractionController(InteractionControllerProtocol):
         """Clear the WhatsApp message input or a provided input target."""
         target = source or self.ui_config.message_box()
         if not target:
-            raise InteractionControllerError("Input Element not found.")
+            raise WhatsAppInteractionError("Input Element not found.")
 
         await self._ensure_clean_input(target)
 
@@ -352,7 +352,7 @@ class InteractionController(InteractionControllerProtocol):
     ) -> bool:
         """Fallback to instant fill when typing fails."""
         if not source:
-            raise InteractionControllerError("Source is Empty in _instant_fill.")
+            raise WhatsAppInteractionError("Source is Empty in _instant_fill.")
 
         try:
             await source.fill(text)
@@ -362,7 +362,7 @@ class InteractionController(InteractionControllerProtocol):
         except (PlaywrightTimeoutError, PlaywrightError) as e:
             await self.page.keyboard.press("Escape", delay=0.5)
             await self.page.keyboard.press("Escape", delay=0.5)
-            raise InteractionControllerError(
+            raise WhatsAppInteractionError(
                 "Instant fill failed. Typing operation was not successful."
             ) from e
 

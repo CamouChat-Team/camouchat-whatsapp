@@ -7,10 +7,9 @@ from dataclasses import dataclass, field
 from queue import Queue
 from typing import List, Optional, TypeVar, Sequence
 
-from camouchat.contracts.chat import ChatProtocol
-from camouchat.contracts.message import MessageProtocol
+from camouchat_core import ChatProtocol , MessageProtocol
 
-from camouchat.Exceptions.base import MessageFilterError
+from camouchat_whatsapp.exceptions import MessageFilterError
 
 T = TypeVar("T", bound=MessageProtocol)
 
@@ -43,7 +42,7 @@ class BindData:
 
 class MessageFilter:
     """
-    Independent, shared Message Filter.
+    Independent, shared Message filters.
 
     function : apply
         - using temporary Queue , Map , Persists the chat with its messages.
@@ -71,7 +70,7 @@ class MessageFilter:
     ) -> List[T]:
         """
         Applies the filter on any set of Messages.
-        Filter is agnostic to message direction or type.
+        filters is agnostic to message direction or type.
 
         uses 3 states :
             - Deliver

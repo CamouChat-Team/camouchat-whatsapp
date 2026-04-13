@@ -393,7 +393,7 @@ class WapiWrapper:
             only_unread:            Only chats with unread messages.
             only_archived:          Only archived chats.
             only_newsletter:        Only WhatsApp Channels.
-            with_labels:            Filter by label name/ID (Business accounts).
+            with_labels:            filters by label name/ID (Business accounts).
             anchor_chat_id:         Chat ID to paginate from.
             ignore_group_metadata:  Skip group member fetching (faster, True by default).
 
@@ -438,7 +438,7 @@ class WapiWrapper:
             count:          Number of messages (-1 for all).
             direction:      'before' (default) or 'after' anchor_msg_id.
             only_unread:    Only return messages user hasn't seen.
-            media:          Filter to 'all' | 'image' | 'document' | 'url' | None.
+            media:          filters to 'all' | 'image' | 'document' | 'url' | None.
             include_calls:  Include call_log entries in results.
             anchor_msg_id:  Full message ID to paginate from.
 

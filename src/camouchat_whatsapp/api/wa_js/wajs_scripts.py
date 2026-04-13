@@ -51,7 +51,7 @@ class WAJS_Scripts:
             only_unread:            Only chats with unread messages.
             only_archived:          Only archived chats.
             only_newsletter:        Only WhatsApp Channels.
-            with_labels:            Filter by label names or IDs (Business accounts).
+            with_labels:            filters by label names or IDs (Business accounts).
             anchor_chat_id:         @c.us or @g.us ID to paginate from.
             ignore_group_metadata:  Skip fetching group member data (faster, default True).
         """
@@ -187,7 +187,7 @@ class WAJS_Scripts:
             count:          Number of messages to fetch. Use -1 for all.
             direction:      'before' (default) or 'after' relative to anchor_msg_id.
             only_unread:    Only return unread messages.
-            media:          Filter to 'all' | 'image' | 'document' | 'url' | None.
+            media:          filters to 'all' | 'image' | 'document' | 'url' | None.
             include_calls:  Whether to include call_log entries in results.
             anchor_msg_id:  Optional full message ID to paginate from (e.g 'true_916..._ABCD').
         """

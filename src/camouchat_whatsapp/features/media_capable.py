@@ -12,12 +12,12 @@ from logging import Logger, LoggerAdapter
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-from camouchat.Exceptions.whatsapp import MenuError, MediaCapableError, WhatsAppError
+from camouchat_whatsapp.exceptions import  WhatsappMediaError, WhatsAppError
 from camouchat_whatsapp.api import WapiSession
 from camouchat_whatsapp.api.models import MessageModelAPI
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_browser import ProfileInfo
-from camouchat_core import MediaCapableProtocol
+from camouchat_core import MediaControllerProtocol
 from playwright.async_api import (
     Page,
     Locator,
@@ -68,7 +68,7 @@ _CATEGORY_TO_PROFILE_ATTR: Dict[str, str] = {
 }
 
 
-class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
+class MediaController(MediaControllerProtocol[WebSelectorConfig]):
     """Handles media file uploads and downloads for WhatsApp chats.
 
     Upload (add_media):
@@ -81,15 +81,15 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
         Retries every second until WA's render cycle caches the blob.
     """
 
-    _instances: weakref.WeakKeyDictionary[Page, MediaCapable] = weakref.WeakKeyDictionary()
+    _instances: weakref.WeakKeyDictionary[Page, MediaController] = weakref.WeakKeyDictionary()
     _initialized: bool = False
 
-    def __new__(cls, *args, **kwargs) -> MediaCapable:
+    def __new__(cls, *args, **kwargs) -> MediaController:
         page = kwargs.get("page") or (args[0] if args else None)
         if page is None:
-            return super(MediaCapable, cls).__new__(cls)
+            return super(MediaController, cls).__new__(cls)
         if page not in cls._instances:
-            instance = super(MediaCapable, cls).__new__(cls)
+            instance = super(MediaController, cls).__new__(cls)
             cls._instances[page] = instance
         return cls._instances[page]
 
@@ -126,24 +126,32 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
             menu_icon = await self.ui_config.plus_rounded_icon().element_handle(timeout=1000)
 
             if not menu_icon:
-                raise MenuError("Menu Locator return None/Empty / menu_clicker / MediaCapable")
+                raise WhatsappMediaError("Menu Locator return None/Empty / menu_clicker / MediaCapable")
 
             await menu_icon.click(timeout=3000)
             await asyncio.sleep(random.uniform(1.0, 1.5))
 
         except PlaywrightTimeoutError as e:
             await self.page.keyboard.press("Escape", delay=0.5)
-            raise MediaCapableError("Time out while clicking menu") from e
+            raise WhatsappMediaError("Time out while clicking menu") from e
 
-    async def add_media(self, mtype: MediaType, file: FileTyped, **kwargs) -> bool:
+    async def add_media(self, file: FileTyped, **kwargs) -> bool:
         """Upload a media file to the current chat."""
+        mtype : MediaType = kwargs.get("mtype") or None
+        if mtype is None  :
+            raise ValueError("mtype is None.")
+
+        if not isinstance(mtype,MediaType):
+            raise TypeError("mtype must be a MediaType")
+
         force = kwargs.get("force", False)
         await self.menu_clicker()
-        self.log.debug("Menu Clicked, Now Checking for corret DataType Locator")
+        self.log.debug("Menu Clicked.")
+
         try:
             target = await self._getOperational(mtype=mtype)
             if not await target.is_visible(timeout=3000):
-                raise MediaCapableError("Attach option not visible")
+                raise WhatsappMediaError("Attach option not visible")
 
             async with self.page.expect_file_chooser() as fc:
                 await target.click(timeout=3000)
@@ -151,7 +159,7 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
 
             p = Path(file.uri)
             if not p.exists() or not p.is_file():
-                raise MediaCapableError(f"Invalid file path: {file.uri}")
+                raise WhatsappMediaError(f"Invalid file path: {file.uri}")
 
             await chooser.set_files(str(p.resolve()))
             if force:
@@ -169,12 +177,12 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
             return True
 
         except PlaywrightTimeoutError as e:
-            raise MediaCapableError("Timeout while resolving media option") from e
+            raise WhatsappMediaError("Timeout while resolving media option") from e
 
         except WhatsAppError as e:
-            if isinstance(e, MediaCapableError):
+            if isinstance(e, WhatsappMediaError):
                 raise e
-            raise MediaCapableError("Unexpected Error in add_media") from e
+            raise WhatsappMediaError("Unexpected Error in add_media") from e
 
     async def _getOperational(self, mtype: MediaType) -> Locator:
         """Get the appropriate menu locator for the media type."""
@@ -197,7 +205,7 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
     def _resolve_save_dir(self, wa_type: Optional[str]) -> Path:
         """Map a WhatsApp MsgType string to the correct ProfileInfo directory."""
         if self._profile is None:
-            raise MediaCapableError(
+            raise WhatsappMediaError(
                 "save_media requires a ProfileInfo instance. "
                 "Pass profile=<ProfileInfo> when constructing MediaCapable."
             )
@@ -212,6 +220,12 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
     ) -> Optional[str]:
         """
         Download and save media from a MessageModelAPI message — Cache API only.
+
+        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+        You Must set on the Auto-Media Download for all type of media inside
+        the Camoufox's Browser WhatsApp to make it possible to download all types
+        else may hit CDN , Use with caution.
+        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
         When open_chat renders the chat, WhatsApp Web downloads the encrypted
         media blob into the browser Cache API as part of its normal render cycle.
@@ -233,7 +247,7 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
             MediaCapableError: If wapi or profile were not injected.
         """
         if self._wapi is None:
-            raise MediaCapableError(
+            raise WhatsappMediaError(
                 "save_media requires a WapiSession. "
                 "Pass wapi=<WapiSession> (after .start()) when constructing MediaCapable."
             )
@@ -267,8 +281,6 @@ class MediaCapable(MediaCapableProtocol[WebSelectorConfig]):
             else self._wapi.bridge.media_save_path(raw, str(save_dir))
         )
 
-        # Simplified: WPP's downloadMedia handles local cache (LRU) transparently.
-        # If auto-download is ON, this call is zero-CDN (stealth).
         result = await self._wapi.bridge.extract_media(
             message=raw,
             save_path=save_path,

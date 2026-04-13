@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from typing import Sequence, List, Dict, Any
 
-from camouchat.Filter.message_filter import MessageFilter
-from camouchat.contracts.message import MessageProtocol
-from camouchat.contracts.storage import StorageProtocol
+from camouchat_whatsapp.filters import MessageFilter
+from camouchat_core import MessageProtocol , StorageProtocol
 
 
 # -----------------------------
-# NoOp Filter
+# NoOp filters
 # -----------------------------
 class NoOpMessageFilter(MessageFilter):
     """No-op filter → returns messages unchanged."""

@@ -9,7 +9,6 @@ from logging import Logger, LoggerAdapter
 from typing import Optional, Union
 
 from camouchat_whatsapp.exceptions import LoginError
-from camouchat_whatsapp.logger import camouchatLogger
 from camouchat_core import LoginProtocol
 from .web_ui_config import WebSelectorConfig
 from playwright.async_api import (

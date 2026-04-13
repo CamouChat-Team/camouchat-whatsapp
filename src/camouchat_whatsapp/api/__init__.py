@@ -6,15 +6,22 @@ Managers :
     - CoreBridge
 """
 
-from .wa_js import WapiWrapper
 from playwright.async_api import Page
+
 from .managers import ChatApiManager, MessageApiManager
+from .models import ChatModelAPI, MessageModelAPI
+from .wa_js import WapiWrapper
+
+__all__ = ["WapiSession", "ChatApiManager", "MessageApiManager", "WapiWrapper", "ChatModelAPI", "MessageModelAPI"]
+
+
 # todo add logger later
 
 class WapiSession:
     """
     WapiSession maintains all the other Core Internal Managers.
     """
+
     # Todo , Initiate WapiSession with weakref to maintain Obj Singleton
     def __init__(self, page: Page):
         self.page = page

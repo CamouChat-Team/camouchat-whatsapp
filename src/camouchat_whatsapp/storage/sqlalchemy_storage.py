@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 from logging import Logger, LoggerAdapter
 
-from camouchat.camouchat_logger import camouchatLogger
 from typing import List, Dict, Any, Optional, Sequence, Union
 
 from sqlalchemy import select, exists
@@ -20,11 +19,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
-from camouchat.BrowserManager.profile_info import ProfileInfo
-from camouchat.Exceptions.base import StorageError
-from camouchat.contracts.message import MessageProtocol
-from camouchat.contracts.storage import StorageProtocol
-from camouchat.StorageDB.models import Base, Message
+from camouchat_browser import ProfileInfo
+from camouchat_whatsapp.exceptions import WhatsAppStorageError
+from camouchat_core import MessageProtocol , StorageProtocol
+from .models import Base, Message
 
 
 class SQLAlchemyStorage(StorageProtocol):
@@ -116,7 +114,7 @@ class SQLAlchemyStorage(StorageProtocol):
         database_url = profile.database_url
         return cls(
             queue=queue,
-            log=log or camouchatLogger,
+            log=log ,
             database_url=database_url,
             batch_size=batch_size,
             flush_interval=flush_interval,
@@ -149,19 +147,19 @@ class SQLAlchemyStorage(StorageProtocol):
 
             self.log.info(f"SQLAlchemy engine initialized: {self.database_url}")
         except Exception as e:
-            raise StorageError(f"Failed to initialize database: {e}") from e
+            raise WhatsAppStorageError(f"Failed to initialize database: {e}") from e
 
     async def create_table(self, **kwargs) -> None:
         """Create tables if not exists."""
         if not self._engine:
-            raise StorageError("Database not initialized. Call init_db() first.")
+            raise WhatsAppStorageError("Database not initialized. Call init_db() first.")
 
         try:
             async with self._engine.begin() as conn:  # type: ignore
                 await conn.run_sync(Base.metadata.create_all)
             self.log.info("Tables created/verified.")
         except Exception as e:
-            raise StorageError(f"Failed to create tables: {e}") from e
+            raise WhatsAppStorageError(f"Failed to create tables: {e}") from e
 
     async def _migrate_add_encryption_columns(self) -> None:
         """
@@ -249,7 +247,7 @@ class SQLAlchemyStorage(StorageProtocol):
     async def _insert_batch_internally(self, msgs: Sequence[MessageProtocol], **kwargs) -> None:
         """Insert batch of messages into database."""
         if not self._session_factory:
-            raise StorageError("Database not initialized.")
+            raise WhatsAppStorageError("Database not initialized.")
 
         if not msgs:
             return
@@ -270,7 +268,7 @@ class SQLAlchemyStorage(StorageProtocol):
         # Insert batch
         session_factory = self._session_factory
         if session_factory is None:
-            raise StorageError("Database not initialized.")
+            raise WhatsAppStorageError("Database not initialized.")
 
         session_factory = self._get_session_factory()
         async with session_factory() as session:
@@ -299,7 +297,7 @@ class SQLAlchemyStorage(StorageProtocol):
             except Exception as e:
                 await session.rollback()
                 self.log.error(f"Batch insert failed: {e}", exc_info=True)
-                raise StorageError(f"Batch insert failed: {e}") from e
+                raise WhatsAppStorageError(f"Batch insert failed: {e}") from e
 
     @staticmethod
     def _message_to_model(msg: MessageProtocol) -> Message:
@@ -520,7 +518,7 @@ class SQLAlchemyStorage(StorageProtocol):
 
     def _get_session_factory(self) -> async_sessionmaker[AsyncSession]:
         if self._session_factory is None:
-            raise StorageError("Database not initialized.")
+            raise WhatsAppStorageError("Database not initialized.")
         return self._session_factory
 
     async def close_db(self, **kwargs) -> None:

@@ -149,7 +149,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
             only_unread:            Only chats with unread messages.
             only_archived:          Only archived chats.
             only_newsletter:        Only WhatsApp Channels.
-            with_labels:            Filter by label name/ID (Business accounts).
+            with_labels:            filters by label name/ID (Business accounts).
             anchor_chat_id:         Chat ID to paginate from.
             ignore_group_metadata:  Skip group member fetching (faster, True by default).
 

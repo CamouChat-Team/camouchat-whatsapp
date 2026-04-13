@@ -17,6 +17,15 @@ class WhatsAppError(CamouChatError):
     pass
 
 
+class MessageFilterError(WhatsAppError):
+    """Message filters Error"""
+    pass
+
+
+class WhatsAppStorageError(WhatsAppError):
+    pass
+
+
 # ----------------- Chat Errors ----------------------------------------
 
 
@@ -97,21 +106,15 @@ class LoginError(WhatsAppError):
 
 
 # ----------------- InteractionController Errors ----------------------------------------
-class InteractionControllerError(WhatsAppError):
+class WhatsAppInteractionError(WhatsAppError):
     """Base Class for all WhatsApp Reply Capable Errors"""
 
     pass
 
 
 # ----------------- MediaCapable Errors ----------------------------------------
-class MediaCapableError(WhatsAppError):
+class WhatsappMediaError(WhatsAppError):
     """Base Class for all WhatsApp Media Capable Errors"""
-
-    pass
-
-
-class MenuError(MediaCapableError):
-    """Menu Error for Media Sending"""
 
     pass
 

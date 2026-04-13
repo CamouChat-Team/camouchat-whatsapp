@@ -13,11 +13,10 @@ from typing import Union, Optional
 
 from playwright.async_api import ElementHandle, Locator, Page
 
-from camouchat_core import WebUISelectorCapable
-# from camouchat_whatsapp.logger import
+from camouchat_core import UiConfigProtocol
 
 
-class WebSelectorConfig(WebUISelectorCapable):
+class WebSelectorConfig(UiConfigProtocol):
     """Generic Custom Class , Different from every Platform"""
 
     def __init__(self, page: Page, log: Optional[Union[Logger, LoggerAdapter]] = None) -> None:
@@ -203,11 +202,11 @@ class WebSelectorConfig(WebUISelectorCapable):
         return self.page.locator('div[role="row"] div[data-id], div[data-id]:has(.copyable-text)')
 
     async def messages_incoming(self) -> Locator:
-        """Filter for the personal | group chat incoming messages"""
+        """filters for the personal | group chat incoming messages"""
         return self.page.locator('[role="row"] div[data-id] .message-in')
 
     async def messages_outgoing(self) -> Locator:
-        """Filter for the personal | group chat outgoing messages"""
+        """filters for the personal | group chat outgoing messages"""
         return self.page.locator('[role="row"] div[data-id] .message-out')
 
     @staticmethod

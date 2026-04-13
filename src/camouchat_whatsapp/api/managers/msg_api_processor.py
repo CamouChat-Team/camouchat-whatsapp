@@ -22,7 +22,7 @@ from camouchat_core import MessageProcessorProtocol, StorageProtocol
 from camouchat_whatsappNoOpPattern import NoOpMessageFilter, NoOpStorage
 
 # Todo , Add logger later
-from camouchat_whatsapp.Filter.message_filter import MessageFilter
+from camouchat_whatsapp.filters.message_filter import MessageFilter
 from camouchat_whatsapp.api.models import ChatModelAPI, MessageModelAPI
 from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
 
@@ -151,7 +151,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
                 self.log.warning(f"MessageApiManager: RAM lookup empty for id={id_serialized!r}")
                 return
 
-            # Filter own messages: WPP fires chat.new_message for outgoing messages too.
+            # filters own messages: WPP fires chat.new_message for outgoing messages too.
             # Distinguish bot's OWN SENT REPLIES from account-owner commands on their phone:
             #   - Bot's sent reply:          true_ prefix  +  recvFresh = False/None
             #     (message was pushed out, never "arrived fresh" from the wire)
@@ -228,7 +228,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
             count:          Messages to fetch (-1 = all loaded in RAM).
             direction:      'before' (newest first, default) or 'after'.
             only_unread:    Only unread messages.
-            media:          Filter: 'all' | 'image' | 'document' | 'url' | None.
+            media:          filters: 'all' | 'image' | 'document' | 'url' | None.
             include_calls:  Include call log entries.
             anchor_msg_id:  id_serialized to paginate from.
 
