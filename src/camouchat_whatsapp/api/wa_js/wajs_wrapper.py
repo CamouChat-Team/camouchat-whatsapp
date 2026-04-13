@@ -13,7 +13,7 @@ from playwright.async_api import Page
 # Todo , add logger later
 from .wajs_scripts import WAJS_Scripts
 from camouchat_whatsapp.exceptions import WAJSError
-
+from camouchat_whatsapp.logger import w_logger
 
 class WapiWrapper:
     """
@@ -28,7 +28,7 @@ class WapiWrapper:
 
     def __init__(self, page: Page, log: Optional[Union[LoggerAdapter, Logger]] = None):
         self.page = page
-        self.log = log or camouchatLogger
+        self.log = log or w_logger
         self._bridge_key: Optional[str] = None
         self._queue_key: Optional[str] = None
         self._bridge_active: bool = False

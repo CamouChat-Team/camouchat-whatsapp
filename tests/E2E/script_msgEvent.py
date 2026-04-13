@@ -4,26 +4,21 @@ Here we will be testing the new Msg Event Hook based Architecture Prototyping.
 
 import asyncio
 
-from camouchat.BrowserManager import (
+from camouchat_browser import (
     BrowserConfig,
     BrowserForge,
     CamoufoxBrowser,
-    Platform,
     ProfileManager,
 )
-from camouchat.contracts.media_capable import FileTyped, MediaType
-from camouchat.StorageDB import StorageType
-from camouchat.WhatsApp import Login, MediaCapable, WebSelectorConfig
+from camouchat_core import Platform
+from camouchat_whatsapp import FileTyped, MediaType
+from camouchat_whatsapp import Login, MediaController, WebSelectorConfig
 
 
 async def main():
     # ── 1. Profile ─────────────────────────────────────────────────────────────
     pm = ProfileManager()
-    profile = pm.create_profile(
-        platform=Platform.WHATSAPP,
-        profile_id="Work",
-        storage_type=StorageType.SQLITE,
-    )
+    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
 
     # ── 2. Browser ─────────────────────────────────────────────────────────────
     browser_forge = BrowserForge()
@@ -43,23 +38,16 @@ async def main():
     # ── 3. Login (reuses session) ───────────────────────────────────────────────
     ui = WebSelectorConfig(page=page)
     login = Login(page=page, UIConfig=ui)
-    await login.login(method=0)  # Auto Handles saved Persistance.
+    await login.login(method=0)  # Auto Handles saved Persistence.
 
     # ── 4. Message event hook ───────────────────────────────────────────────────
-    from camouchat.WhatsApp.api import WapiSession
-    from camouchat.WhatsApp.api.models import MessageModelAPI
-    from camouchat.WhatsApp.decorator import msg_event_hook
-    from camouchat.WhatsApp.features.human_interaction_controller import (
-        HumanInteractionController,
-    )
-    from camouchat.WhatsApp.features.interaction_controller import InteractionController
+    from camouchat_whatsapp import WapiSession , MessageModelAPI , on_newMsg , InteractionController
 
     wapi = WapiSession(page=page)
-    replyObj = InteractionController(page=page, ui_config=ui, wapi=wapi)
-    media = MediaCapable(page=page, UIConfig=ui, wapi=wapi, profile=profile)
-    hum = HumanInteractionController(page=page, ui_config=ui)
+    interaction = InteractionController(page=page, ui_config=ui, wapi=wapi)
+    media = MediaController(page=page, UIConfig=ui, wapi=wapi, profile=profile)
 
-    @msg_event_hook(wapi_session=wapi)  # Pass the Wapi Session object here
+    @on_newMsg(wapi_session=wapi)  # Pass the Wapi Session object here
     async def new_msg(msg: MessageModelAPI):
         print("\n --------- New Msg Arrived ───────────────────────────────────")
         print(msg, "\n")
@@ -96,8 +84,7 @@ async def main():
                 f"\u2022 Is Group: {chat.groupType}\n"
                 f"\u2022 Is Archived: {chat.isArchived}\n"
             )
-            await hum.send_api_text(
-                bridge=wapi.bridge,
+            await interaction.send_api_text(
                 text=info_text,
                 chat_id=msg.jid_From,
                 quoted_msg_id=msg.id_serialized,
@@ -108,25 +95,28 @@ async def main():
             # Tests identity and sender objects
             sender_name = getattr(msg.senderObj, "formattedName", "Unknown")
             push_name = getattr(msg.senderObj, "pushname", "Unknown")
-            # await replyObj.quote_only(message=msg)
-            await hum.send_api_text(
+            await interaction.send_api_text(
                 chat_id=msg.jid_From,
-                bridge=wapi.bridge,
                 text=f"\ud83d\udc64 *Identity Profile*\n\u2022 Name: {sender_name}\n\u2022 PushName: {push_name}",
+                quoted_msg_id=msg.id_serialized
             )
 
         elif msg.body and msg.body.startswith("!echo "):
             print("[*] Command triggered: !echo (Humanized Interaction)")
             echo_text = msg.body.replace("!echo ", "")
-            await replyObj.reply(
-                message=msg, humanize=hum, text=f"Echo: {echo_text}"
-            )  # Directly use native typing.
+            await interaction.send_text(
+                message=msg,
+                text=f"Echo: {echo_text}", # Type using manual/clipboard
+                quote=True,  # add quote using browser automation
+                send=True  # send to send text or not.
+            )
+
         elif msg.body and msg.body == "!media":
             print("[*] Command triggered: !media — requesting test image upload")
-            await hum.send_api_text(
+            await interaction.send_api_text(
                 chat_id=msg.jid_From,
-                bridge=wapi.bridge,
                 text="📎 Send me any image, video, or audio to test media save+resend.",
+                quoted_msg_id=msg.id_serialized,
             )
 
         elif msg.msgtype in (
@@ -145,10 +135,10 @@ async def main():
 
             if not saved_path:
                 print("[!] save_media returned None — media could not be retrieved.")
-                await hum.send_api_text(
+                await interaction.send_api_text(
                     chat_id=msg.jid_From,
-                    bridge=wapi.bridge,
                     text=f"⚠️ Could not retrieve media (type={msg.msgtype}).",
+                    quoted_msg_id=msg.id_serialized,
                 )
                 return
 
@@ -181,6 +171,7 @@ async def main():
 
     # Keep the script running to listen for events
     await new_msg()
+
     print("\n[\u2714] Hook active. Try sending !ping, !info, !me, or !echo <text> in WhatsApp.")
     await asyncio.sleep(3600)  # 1 hour running.
 

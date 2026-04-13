@@ -19,9 +19,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union, Sequence
 
 from camouchat_core import MessageProcessorProtocol, StorageProtocol
-from camouchat_whatsappNoOpPattern import NoOpMessageFilter, NoOpStorage
+from camouchat_whatsapp.NoOpPattern import NoOpMessageFilter, NoOpStorage
 
 # Todo , Add logger later
+from camouchat_whatsapp.logger import w_logger # Temp solution
 from camouchat_whatsapp.filters.message_filter import MessageFilter
 from camouchat_whatsapp.api.models import ChatModelAPI, MessageModelAPI
 from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
@@ -55,7 +56,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         self.ui_config = None
         self.storage = storage_obj or NoOpStorage()
         self.filter = filter_obj or NoOpMessageFilter()
-        self.log = log
+        self.log = log or w_logger
         self._bridge = bridge
         self._bridge_active: bool = False
         self._handlers: List[Callable[[MessageModelAPI], Any]] = []

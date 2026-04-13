@@ -8,7 +8,7 @@ from playwright.async_api import Page
 from camouchat_core import ChatProtocol ,ChatProcessorProtocol
 from camouchat_whatsapp.api.models import ChatModelAPI
 from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
-
+from camouchat_whatsapp.logger import w_logger
 # todo , Add Auto logger later
 
 class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
@@ -17,7 +17,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
     ) -> None:
         self.page = page
         self.ui_config = None
-        self.log = logger
+        self.log = logger or w_logger
         self._bridge = bridge
         self._last_opened_chat_id: str | None = None
 

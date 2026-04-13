@@ -11,6 +11,7 @@ from playwright.async_api import Page
 from .managers import ChatApiManager, MessageApiManager
 from .models import ChatModelAPI, MessageModelAPI
 from .wa_js import WapiWrapper
+from camouchat_whatsapp.logger import w_logger
 
 __all__ = ["WapiSession", "ChatApiManager", "MessageApiManager", "WapiWrapper", "ChatModelAPI", "MessageModelAPI"]
 
@@ -26,9 +27,9 @@ class WapiSession:
     def __init__(self, page: Page):
         self.page = page
         self.bridge = WapiWrapper(page)
-        self.chat_manager = ChatApiManager(self.page, self.bridge, camouchatLogger)
-        self.message_manager = MessageApiManager(self.bridge, camouchatLogger)
-        self.log = camouchatLogger
+        self.chat_manager = ChatApiManager(self.page, self.bridge)
+        self.message_manager = MessageApiManager(self.bridge)
+        self.log = w_logger
         self.is_ready = False
 
     async def start(self) -> None:

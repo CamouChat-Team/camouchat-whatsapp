@@ -11,16 +11,17 @@ from logging import Logger, LoggerAdapter
 from typing import Union, Optional, Any
 
 import pyperclip
+from camouchat_core import InteractionControllerProtocol
 from filelock import FileLock
 from playwright.async_api import Page, ElementHandle, Locator
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 
-
-from camouchat_whatsapp.exceptions import WhatsAppInteractionError
-from camouchat_core import InteractionControllerProtocol
 from camouchat_whatsapp.api import WapiSession
 from camouchat_whatsapp.api.models import MessageModelAPI
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.exceptions import WhatsAppInteractionError
+from camouchat_whatsapp.logger import w_logger
+
 # Todo , add logger later
 
 _clipboard_async_lock = asyncio.Lock()
@@ -45,17 +46,17 @@ class InteractionController(InteractionControllerProtocol):
         return cls._instances[page]
 
     def __init__(
-        self,
-        page: Page,
-        ui_config: WebSelectorConfig,
-        log: Optional[Union[LoggerAdapter, Logger]] = None,
-        wapi: Optional[WapiSession] = None,
+            self,
+            page: Page,
+            ui_config: WebSelectorConfig,
+            log: Optional[Union[LoggerAdapter, Logger]] = None,
+            wapi: Optional[WapiSession] = None,
     ) -> None:
         if hasattr(self, "_initialized") and self._initialized:
             return
         self.page = page
         self.ui_config = ui_config
-        self.log = log
+        self.log = log or w_logger
         if self.page is None:
             raise ValueError("page must not be None")
         self._wapi: Optional[WapiSession] = wapi
@@ -64,7 +65,7 @@ class InteractionController(InteractionControllerProtocol):
     # ----------------------------------------------------
     # Humanize func
     async def send_api_text(
-        self, text: str, chat_id: str, quoted_msg_id: Optional[str] = None
+            self, text: str, chat_id: str, quoted_msg_id: Optional[str] = None
     ) -> bool:
         """
         Skips native OS usage & Directly send text via RAM Func.
@@ -124,15 +125,22 @@ class InteractionController(InteractionControllerProtocol):
 
     # ----------------------------------------------------
 
-    async def reply(self, message: MessageModelAPI, text: Optional[str]) -> bool:
+    async def send_text(
+            self,
+            message: MessageModelAPI,
+            text: Optional[str],
+            quote: bool = False,
+            send: bool = False
+    ) -> bool:
         """Reply to a message with optional text."""
         try:
-            await self.quote(message)
+            if quote:
+                await self.quote(message)
 
             text = text or ""
             success = await self.type_text(
                 text=text,
-                send=True,
+                send=send,
             )
 
             return success
@@ -196,7 +204,9 @@ class InteractionController(InteractionControllerProtocol):
         raise WhatsAppInteractionError("side_edge_click failed after max attempts.")
 
     async def focus_input(
-        self, source: ElementHandle | Locator | None = None, **kwargs
+            self,
+            source: ElementHandle | Locator | None = None,
+            **kwargs
     ) -> ElementHandle | Locator:
         """Focus the WhatsApp message input or a provided input target."""
         target = source or self.ui_config.message_box()
@@ -207,11 +217,11 @@ class InteractionController(InteractionControllerProtocol):
         return target
 
     async def type_text(
-        self,
-        text: str,
-        source: ElementHandle | Locator | None = None,
-        send: bool = False,
-        **kwargs,
+            self,
+            text: str,
+            source: ElementHandle | Locator | None = None,
+            send: bool = False,
+            **kwargs,
     ) -> bool:
         """
         Type text with human-like delays.
@@ -282,12 +292,12 @@ class InteractionController(InteractionControllerProtocol):
         return self.page.locator(selector).first
 
     async def _click_message_side_padding(
-        self,
-        message_container: Locator,
-        *,
-        data_id: str,
-        from_me: bool,
-        click_count: int = 1,
+            self,
+            message_container: Locator,
+            *,
+            data_id: str,
+            from_me: bool,
+            click_count: int = 1,
     ) -> bool:
         """Click the non-DOM side padding region of a message row."""
         await message_container.scroll_into_view_if_needed(timeout=3000)
@@ -321,7 +331,7 @@ class InteractionController(InteractionControllerProtocol):
         return data_id.startswith("true_")
 
     async def _ensure_clean_input(
-        self, source: Union[ElementHandle, Locator], retries: int = 3
+            self, source: Union[ElementHandle, Locator], retries: int = 3
     ) -> None:
 
         for attempt in range(1, retries + 1):
@@ -345,10 +355,10 @@ class InteractionController(InteractionControllerProtocol):
                     raise
 
     async def _Instant_fill(
-        self,
-        text: str,
-        source: Optional[Union[ElementHandle, Locator]],
-        send: bool = False,
+            self,
+            text: str,
+            source: Optional[Union[ElementHandle, Locator]],
+            send: bool = False,
     ) -> bool:
         """Fallback to instant fill when typing fails."""
         if not source:

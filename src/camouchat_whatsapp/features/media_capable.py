@@ -24,6 +24,10 @@ from playwright.async_api import (
     FileChooser,
     TimeoutError as PlaywrightTimeoutError,
 )
+
+from camouchat_whatsapp.logger import w_logger
+
+
 # Todo add logger later.
 
 class MediaType(str, Enum):
@@ -109,7 +113,7 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
             raise ValueError("ui_config must not be None")
         self.page = page
         self.ui_config = ui_config
-        self.log = log
+        self.log = log or w_logger
         if self.page is None:
             raise ValueError("page must not be None")
         self._wapi: Optional[WapiSession] = wapi

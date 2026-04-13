@@ -23,6 +23,7 @@ from camouchat_browser import ProfileInfo
 from camouchat_whatsapp.exceptions import WhatsAppStorageError
 from camouchat_core import MessageProtocol , StorageProtocol
 from .models import Base, Message
+from ..logger import w_logger
 
 
 class SQLAlchemyStorage(StorageProtocol):
@@ -76,7 +77,7 @@ class SQLAlchemyStorage(StorageProtocol):
             echo: Enable SQL query logging (for debugging)
         """
         self.queue = queue
-        self.log = log or camouchatLogger
+        self.log = log or w_logger
 
         self.database_url = database_url
         self._initialized = True
@@ -114,7 +115,7 @@ class SQLAlchemyStorage(StorageProtocol):
         database_url = profile.database_url
         return cls(
             queue=queue,
-            log=log ,
+            log=log or w_logger,
             database_url=database_url,
             batch_size=batch_size,
             flush_interval=flush_interval,

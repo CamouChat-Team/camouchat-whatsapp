@@ -7,6 +7,9 @@ and human-like interaction capabilities for WhatsApp Web automation.
 
 # Public API imports (runtime)
 
+#Wajs
+from .api import WapiSession, WapiWrapper
+
 # API models
 from .api import ChatModelAPI, MessageModelAPI
 
@@ -15,7 +18,7 @@ from .api import MessageApiManager, ChatApiManager
 
 # Controllers (interaction layer)
 from .core import Login, WebSelectorConfig
-from .features import MediaController, InteractionController
+from .features import MediaController, InteractionController , MediaType, FileTyped
 
 # Infrastructure
 from .storage import SQLAlchemyStorage
@@ -26,6 +29,10 @@ from .filters import MessageFilter
 
 
 __all__ = [
+    #wajs
+    "WapiSession",
+    "WapiWrapper",
+
     # API models
     "ChatModelAPI",
     "MessageModelAPI",
@@ -39,6 +46,8 @@ __all__ = [
     "WebSelectorConfig",
     "MediaController",
     "InteractionController",
+    "MediaType",
+    "FileTyped",
 
     # Infra
     "SQLAlchemyStorage",

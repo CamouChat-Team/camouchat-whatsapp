@@ -22,7 +22,7 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 # Todo, add logger later
-
+from camouchat_whatsapp.logger import w_logger
 class Login(LoginProtocol):
     """Handles WhatsApp Web authentication via QR code or phone number."""
 
@@ -55,7 +55,7 @@ class Login(LoginProtocol):
             raise ValueError("ui_config must not be None")
         self.page = page
         self.ui_config = ui_config
-        self.log = log
+        self.log = log or w_logger
         self._initialized = True
 
     async def is_login_successful(self, **kwargs) -> bool:
