@@ -138,7 +138,7 @@ wheels = [
 
 [[package]]
 name = "camouchat-browser"
-version = "0.1.0"
+version = "0.7.0"
 source = { editable = "../camouchat-browser" }
 dependencies = [
     { name = "browserforge" },
@@ -184,22 +184,11 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiomysql", marker = "extra == 'mysql'", specifier = ">=0.2.0" },
-    { name = "asyncpg", marker = "extra == 'postgresql'", specifier = ">=0.29.0" },
-    { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "colorlog", specifier = ">=6.10.1" },
     { name = "concurrent-log-handler", specifier = ">=0.9.29" },
     { name = "cryptography", specifier = ">=41.0.0" },
-    { name = "deptry", marker = "extra == 'dev'", specifier = ">=0.16.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "platformdirs", specifier = ">=4.9.4" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
-    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.11.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.0.290" },
 ]
-provides-extras = ["postgresql", "mysql", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

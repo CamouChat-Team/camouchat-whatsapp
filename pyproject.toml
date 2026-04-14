@@ -1,12 +1,43 @@
 [project]
 name = "camouchat-whatsapp"
 version = "0.7.0"
-description = "Add your description here"
+description = "High-stealth WhatsApp automation plugin for CamouChat, utilizing WA-JS and unified storage."
 readme = "README.md"
 authors = [
     { name = "BITS-Rohit", email = "rohitguptaradheradhe123@gmail.com" }
 ]
+maintainers = [
+    { name = "BITS-Rohit", email = "rohitguptaradheradhe123@gmail.com" }
+]
 requires-python = ">=3.14"
+license = "MIT"
+keywords = [
+    "whatsapp",
+    "whatsapp-automation",
+    "whatsapp-bot",
+    "whatsapp-web",
+    "wa-js",
+    "stealth",
+    "bot",
+    "anti-detection",
+    "async",
+    "camouchat",
+    "playwright",
+    "automation-framework"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Communications :: Chat",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Framework :: AsyncIO",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Natural Language :: English",
+]
 dependencies = [
     "aiosqlite>=0.22.1",
     "camouchat-browser",
@@ -17,16 +48,21 @@ dependencies = [
     "sqlalchemy>=2.0.49",
 ]
 
+[project.urls]
+Homepage = "https://github.com/CamouChat-Team"
+Repository = "https://github.com/CamouChat-Team/camouchat-whatsapp"
+"Bug Tracker" = "https://github.com/CamouChat-Team/camouchat-whatsapp/issues"
+Changelog = "https://github.com/CamouChat-Team/camouchat-whatsapp/releases"
+
 [tool.deptry]
 per_rule_ignores = { DEP002 = "aiosqlite", DEP003 = "camouchat_whatsapp" }
 
 [build-system]
 requires = ["uv_build>=0.10.7,<0.11.0"]
 build-backend = "uv_build"
-
 [tool.uv.sources]
-camouchat-core = { path = "../camouchat-core", editable = true }
-camouchat-browser = { path = "../camouchat-browser", editable = true }
+camouchat-core = { workspace = true }
+camouchat-browser = { workspace = true }
 
 [dependency-groups]
 dev = [
