@@ -49,23 +49,53 @@ This downloads the latest hardened Firefox binary used internally by [Camoufox](
 
 ```python
 import asyncio
-from camouchat_browser import BrowserConfig, BrowserForge, ProfileManager
-from camouchat_whatsapp import WhatsAppBot
+from camouchat_browser import BrowserConfig, BrowserForge, CamoufoxBrowser, ProfileManager
 from camouchat_core import Platform
+from camouchat_whatsapp import (
+    Login,
+    WebSelectorConfig,
+    WapiSession,
+    InteractionController,
+    MessageModelAPI,
+    on_newMsg,
+)
 
 async def main():
+    # 1. Profile
     pm = ProfileManager()
-    profile = pm.create_profile(Platform.WHATSAPP, "my_account")
+    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="my_account")
 
+    # 2. Browser
     config = BrowserConfig.from_dict({
         "platform": Platform.WHATSAPP,
         "headless": False,
         "locale": "en-US",
         "fingerprint_obj": BrowserForge(),
     })
+    browser = CamoufoxBrowser(config=config, profile=profile)
+    page = await browser.get_page()
 
-    bot = WhatsAppBot(config=config, profile=profile)
-    await bot.start()
+    # 3. Login (reuses saved session automatically)
+    ui = WebSelectorConfig(page=page)
+    login = Login(page=page, UIConfig=ui)
+    await login.login(method=0)
+
+    # 4. Message event hook
+    wapi = WapiSession(page=page)
+    interaction = InteractionController(page=page, ui_config=ui, wapi=wapi)
+
+    @on_newMsg(wapi_session=wapi)
+    async def handle_message(msg: MessageModelAPI):
+        print(f"New message from {msg.jid_From}: {msg.body}")
+        if msg.body == "!ping":
+            await interaction.send_api_text(
+                chat_id=msg.jid_From,
+                text="🏓 Pong!",
+                quoted_msg_id=msg.id_serialized,
+            )
+
+    await handle_message()   # start listening
+    await asyncio.sleep(3600)  # keep alive
 
 asyncio.run(main())
 ```
