@@ -86,31 +86,11 @@ asyncio.run(main())
 - [Core SDK](https://github.com/CamouChat-Team/camouchat-core)
 - [Browser Plugin](https://github.com/CamouChat-Team/camouchat-browser)
 
-## Security & Usage
+## ⚖️ Security & Ethics
 
-### Acceptable Use
-- Research & prototyping
-- Personal automation
-- Learning
+CamouChat's strict policy regarding acceptable automation, anti-spam, and stealth disclaimers can be found in our central ecosystem hub:
 
-### Prohibited Use
-- Spam or bulk messaging
-- WhatsApp ToS violations
-- Harmful or malicious automation
-
-### Best Practices
-- Always use **test accounts** before deploying on real numbers
-- Enable **rate limiting** to avoid burst-sending
-- Use **residential proxies** with GeoIP matching
-- Never store credentials in plaintext
-
-### Data & Privacy
-- Local-first — no telemetry, no external transmission
-- Messages encrypted at rest with AES-256-GCM
-
-### Disclaimer
-- No guarantee of undetectability
-- Not responsible for account bans or misuse
+👉 **[SECURITY.md](https://github.com/CamouChat-Team/CamouChat/blob/main/SECURITY.md)**
 
 ---
 
