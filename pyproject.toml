@@ -1,7 +1,7 @@
 [project]
 name = "camouchat-whatsapp"
 version = "0.7.0"
-description = "High-stealth WhatsApp automation plugin for CamouChat, utilizing WA-JS and unified storage."
+description = "High-stealth WhatsApp Web automation plugin for CamouChat. WA-JS powered, async-first, multi-account with AES-256 encrypted storage."
 readme = "README.md"
 authors = [
     { name = "BITS-Rohit", email = "rohitguptaradheradhe123@gmail.com" }
@@ -16,20 +16,33 @@ keywords = [
     "whatsapp-automation",
     "whatsapp-bot",
     "whatsapp-web",
+    "whatsapp-web-automation",
     "wa-js",
+    "wppconnect",
     "stealth",
-    "bot",
     "anti-detection",
+    "anti-ban",
+    "fingerprinting",
+    "bot",
     "async",
+    "asyncio",
     "camouchat",
     "playwright",
-    "automation-framework"
+    "camoufox",
+    "automation-framework",
+    "aes-256",
+    "encrypted-storage",
+    "multi-account",
+    "chat-bot",
+    "agents",
+    "web-automation"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Communications :: Chat",
     "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Security :: Cryptography",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.14",

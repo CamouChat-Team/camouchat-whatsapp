@@ -19,10 +19,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union, Sequence
 
 from camouchat_core import MessageProcessorProtocol, StorageProtocol
-from camouchat_whatsapp.NoOpPattern import NoOpMessageFilter, NoOpStorage
+from camouchat_whatsapp.core.noop import NoOpMessageFilter, NoOpStorage
 
-# Todo , Add logger later
-from camouchat_whatsapp.logger import w_logger  # Temp solution
+from camouchat_whatsapp.logger import w_logger
 from camouchat_whatsapp.filters.message_filter import MessageFilter
 from camouchat_whatsapp.api.models import ChatModelAPI, MessageModelAPI
 from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
