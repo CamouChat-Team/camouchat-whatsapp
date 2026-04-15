@@ -9,11 +9,13 @@ Supports:
 - **PostgreSQL** via `asyncpg`
 
 ```python
+import asyncio
 from camouchat_whatsapp import SQLAlchemyStorage
 
-storage = SQLAlchemyStorage(database_url="sqlite+aiosqlite:///messages.db")
-await storage.init()
-await storage.save_message(message_obj)
+queue = asyncio.Queue()
+storage = SQLAlchemyStorage(queue=queue, database_url="sqlite+aiosqlite:///messages.db")
+await storage.start()  # init_db + create_table + start_writer
+await storage.enqueue_insert([message_obj])  # enqueue for async batch write
 ```
 
 The database URL is automatically configured by `ProfileManager` when creating a profile sandbox.
@@ -28,17 +30,22 @@ Common filter rules:
 ```python
 from camouchat_whatsapp import MessageFilter
 
-msg_filter = MessageFilter(allow_from_me=False)
-passed = msg_filter.check(message=msg)
+# Rate-limit: max 10 messages per 60-second window
+msg_filter = MessageFilter(Max_Messages_Per_Window=10, Window_Seconds=60)
+passed = msg_filter.apply(msgs=[msg])  # returns [] if rate-limited, [msg] if delivered
 ```
 
 ## `on_newMsg` Decorator
 Register a callback to be invoked whenever a new message passes all active filters.
 
 ```python
-from camouchat_whatsapp import on_newMsg
+from camouchat_whatsapp import on_newMsg, WapiSession
 
-@on_newMsg
-async def handle(message):
-    print(f"New message from {message.sender}: {message.body}")
+wapi = WapiSession(page=page)
+
+@on_newMsg(wapi_session=wapi)
+async def handle(msg):
+    print(f"New message from {msg.jid_From}: {msg.body}")
+
+await handle()  # registers the handler and starts bridge
 ```

@@ -23,11 +23,16 @@ Handles the lifecycle of `ChatModelAPI` objects. Provides lookup, caching, and p
 
 ## Usage Example
 
+The `MessageApiManager` is instantiated by `WapiSession` internally. If you need it standalone:
+
 ```python
-from camouchat_whatsapp import MessageApiManager, SQLAlchemyStorage, MessageFilter
+from camouchat_whatsapp import WapiSession, SQLAlchemyStorage, MessageFilter
+import asyncio
 
-storage = SQLAlchemyStorage(database_url="sqlite+aiosqlite:///messages.db")
-msg_filter = MessageFilter(allow_from_me=False)
+queue = asyncio.Queue()
+storage = SQLAlchemyStorage(queue=queue, database_url="sqlite+aiosqlite:///messages.db")
+msg_filter = MessageFilter(Max_Messages_Per_Window=20, Window_Seconds=60)
 
-manager = MessageApiManager(storage=storage, msg_filter=msg_filter)
+# Attach via WapiSession (preferred)
+wapi = WapiSession(page=page, storage_obj=storage, filter_obj=msg_filter)
 ```
