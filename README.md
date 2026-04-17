@@ -48,7 +48,9 @@ This downloads the latest hardened Firefox binary used internally by [Camoufox](
 ## Quick Start
 
 ```python
+
 import asyncio
+
 from camouchat_browser import BrowserConfig, BrowserForge, CamoufoxBrowser, ProfileManager
 from camouchat_core import Platform
 from camouchat_whatsapp import (
@@ -64,6 +66,8 @@ async def main():
     # 1. Profile
     pm = ProfileManager()
     profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="my_account")
+
+    print("Location of saved DIR cookies : ", profile.cache_dir)
 
     # 2. Browser
     config = BrowserConfig.from_dict({
@@ -84,9 +88,18 @@ async def main():
     wapi = WapiSession(page=page)
     interaction = InteractionController(page=page, ui_config=ui, wapi=wapi)
 
+    cm = wapi.chat_manager
+
     @on_newMsg(wapi_session=wapi)
     async def handle_message(msg: MessageModelAPI):
         print(f"New message from {msg.jid_From}: {msg.body}")
+
+        # open chat & send msg .
+        print(f"Opening Chat... [{msg.author}]")
+        chat_id = msg.jid_From # jid is internal WhatsApp used ID system , and _from tells from which chat this came on, so jid_from -> msg came from which chat.
+        chat = await cm.get_chat_by_id(chat_id=chat_id)
+        await cm.open_chat(chat= chat)
+
         if msg.body == "!ping":
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
@@ -97,7 +110,16 @@ async def main():
     await handle_message()   # start listening
     await asyncio.sleep(3600)  # keep alive
 
-asyncio.run(main())
+
+if __name__ == "__main__":
+    try :
+        asyncio.run(main())
+    except KeyboardInterrupt :
+        pass
+    except Exception  :
+        import tracemalloc
+        tracemalloc.print_exc()
+
 ```
 
 ## Anti-Ban Best Practices
