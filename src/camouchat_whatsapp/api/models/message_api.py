@@ -16,7 +16,7 @@ class MessageModelAPI(MessageProtocol):
         fromMe (bool | None): True if the message was sent by the authenticated user.
         jid_From (str | None): JID of the sender (or the Group JID if received in a group).
         jid_To (str | None): JID of the recipient.
-        author (str | None): JID of the specific person who sent it (ONLY present in group chats).
+        author (str | None): JID of the specific person who sent it (ONLY present in group chats, can be @lid or @g.us).
         pushname (str | None): The notification name of the sender.
         broadcast (bool | None): True if sent via a Broadcast List.
         msgtype (str | None): Message type: 'chat','image','video','ptt','document','revoked', etc.
@@ -96,8 +96,12 @@ class MessageModelAPI(MessageProtocol):
         isViewed (bool | None): Local UI state: True if the bubble no longer has the unread dot.
 
     Note:
-        If a field is None it most likely means the webpack patch did not expose that property,
+        1. If a field is None it most likely means the webpack patch did not expose that property,
         or WhatsApp silently changed internal key names in a recent update.
+
+        2. 'ack', 'timestamp', and delivery-state fields reflect the snapshot at the moment chat.new_message fired. 
+        Real-time updates (ack=2/3/4) arrive via separate msg.ack events and are not captured here. 
+        Re-fetch by id if current delivery state is needed.
     """
 
     # ── Identity ──────────────────────────────────────────────────────────────

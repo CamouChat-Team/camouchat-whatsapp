@@ -1,5 +1,7 @@
 import asyncio
+import json
 import random
+
 from logging import Logger, LoggerAdapter
 from typing import Any, Sequence
 
@@ -32,87 +34,149 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
 
     async def open_chat(self, chat: ChatProtocol) -> bool:
         """
-        Opens the chat using a Stealth Hybrid approach.
-        1. Tries to find the chat physically on the screen and injects human CDP mouse clicks.
-        2. If virtualized (hidden), falls back to the RAM bridge.
+        Opens a WhatsApp chat with stealth-grade DOM reliability.
+
+        Strategy (3-retry loop):
+            1. JS scroll-into-view — scrolls #pane-side to expose the target row.
+            2. Humanized mouse arc to estimated center (Camoufox humanize active).
+            3. JS re-query after mouse travel — React may have re-rendered during arc.
+            4. Micro-correction mouse.move (steps=3) + physical Playwright click.
+               → isTrusted=true, coordinates match cursor position.
+            5. WPP verify: read active chat JID (no side effects, no click flag).
+            6. On 3 failures → mw: fire-and-forget WPP fallback (logged as anomaly).
+
+        Notes:
+            scrollIntoView is always required — even under Xvfb (virtual display).
+            WhatsApp's chat list virtualizes DOM nodes based on the scroll container's
+            CSS height, NOT the physical/virtual screen size. Off-screen nodes simply
+            don't exist in the DOM. Xvfb gives a real display to the browser but does
+            not change how React decides what to render. No Xvfb detection needed.
         """
         assert self.page is not None
-        assert self.log is not None
         page = self.page
+
         if chat is None:
             raise ValueError("Chat is None, cannot open chat")
 
+        # Fast path: ID cache + WPP verify
         if chat.id_serialized == self._last_opened_chat_id:
-            self.log.debug(
-                f"Chat {chat.id_serialized} is already the active view based on cache."
-            )
+            self.log.debug(f"Chat {chat.id_serialized} matches last-opened cache.")
             return True
 
-        # If we don't have a formatted Title, we cannot safely scrape the DOM. Skip to RAM fallback.
-        name = getattr(chat, "formattedTitle", None)
-        if name:
-            self.log.debug(f"Locating chat: {name} ({chat.id_serialized})")
+        name: str | None = getattr(chat, "formattedTitle", None)
+        if not name:
+            self.log.warning(f"No formattedTitle for {chat.id_serialized} — going direct to fallback.")
+            return await self._wpp_open_fallback(chat)
 
+        safe_title = json.dumps(name)  # handles apostrophes, quotes, emoji
+
+        # ── JS helper: scroll into view + get row center ─────────────────────────
+        _find_js = f"""() => {{
+            const pane = document.getElementById('pane-side');
+            if (!pane) return null;
+            const title = {safe_title};
+            const spans = pane.querySelectorAll('span[title]');
+            for (const span of spans) {{
+                if (span.title === title) {{
+                    const row = span.closest('[role="listitem"]')
+                                || span.closest('[data-testid="cell-frame-container"]')
+                                || span;
+                    // Scroll inside the WA pane container, not window
+                    row.scrollIntoView({{ block: 'nearest', behavior: 'instant' }});
+                    const r = row.getBoundingClientRect();
+                    // Reject zero-size rects (off-screen or not yet rendered)
+                    if (r.width === 0 || r.height === 0) return null;
+                    return {{ cx: r.x + r.width / 2, cy: r.y + r.height / 2 }};
+                }}
+            }}
+            return null;
+        }}"""
+
+        # ── 3-retry click loop ────────────────────────────────────────────────────
+        MAX_RETRIES = 3
+        for attempt in range(MAX_RETRIES):
+            self.log.debug(f"open_chat attempt {attempt + 1}/{MAX_RETRIES} — '{name}'")
+
+            # Step 1: scroll into view + initial rect
+            rect = await page.evaluate(_find_js)
+            if rect is None:
+                self.log.debug(f"'{name}' not in #pane-side DOM (attempt {attempt + 1})")
+                await asyncio.sleep(0.1 * (attempt + 1))
+                continue
+
+            # Step 2: humanized arc to estimated center (Camoufox humanize active)
+            jitter = random.uniform(-12, 12)
+            await page.mouse.move(rect["cx"] + jitter, rect["cy"] + jitter)
+            await asyncio.sleep(random.uniform(0.08, 0.2))
+
+            # Step 3: re-query — React may have shifted the row during mouse travel
+            rect2 = await page.evaluate(_find_js)
+            if rect2 is None:
+                self.log.debug(f"'{name}' vanished after mouse arc (attempt {attempt + 1})")
+                await asyncio.sleep(0.15 * (attempt + 1))
+                continue
+
+            # Step 4: micro-correction + physical isTrusted click
+            await page.mouse.move(rect2["cx"], rect2["cy"], steps=3)
+            await asyncio.sleep(random.uniform(0.05, 0.12))
+            await page.mouse.click(rect2["cx"], rect2["cy"])
+
+            # Step 5: WPP verify (read-only)
+            await asyncio.sleep(0.12)
             try:
-                chat_locator = (
-                    page.locator("div#pane-side, div[aria-label*='Chat list' i]")
-                    .locator(f"span[title='{name}']")
-                    .first
+                active_id = await self._bridge._evaluate_stealth(
+                    WAJS_Scripts.get_active_chat_id()
                 )
-
-                if await chat_locator.count() > 0 and await chat_locator.is_visible(
-                    timeout=5000
-                ):
-                    box = await chat_locator.bounding_box()
-                    if box:
-                        # Calculate center coordinates
-                        target_x = box["x"] + (box["width"] / 2)
-                        target_y = box["y"] + (box["height"] / 2)
-
-                        self.log.debug(
-                            f"Chat physically visible. Injecting physical CDP click at {target_x}, {target_y}."
-                        )
-
-                        # Humanize Movement
-                        await page.mouse.move(
-                            target_x + random.uniform(-10, 10),
-                            target_y + random.uniform(-10, 10),
-                        )
-                        await asyncio.sleep(random.uniform(0.1, 0.4))
-
-                        # Hardware level click, bypasses execution locks
-                        assert page is not None
-                        await page.mouse.click(
-                            target_x + random.uniform(-2, 2),
-                            target_y + random.uniform(-2, 2),
-                        )
-                        self._last_opened_chat_id = chat.id_serialized
-                        return True
+                if active_id == chat.id_serialized:
+                    self._last_opened_chat_id = chat.id_serialized
+                    self.log.debug(f"open_chat verified OK — '{name}' active.")
+                    return True
+                self.log.debug(
+                    f"Verify miss: active={active_id!r} expected={chat.id_serialized!r} "
+                    f"(attempt {attempt + 1})"
+                )
             except Exception as e:
-                self.log.warning(
-                    f"Stealth DOM scrape failed for {name}, reverting to RAM: {e}"
-                )
+                self.log.debug(f"WPP verify failed (attempt {attempt + 1}): {e}")
 
-        # Virtualized DOM Fallback
-        self.log.debug(
-            f"Chat '{name or chat.id_serialized}' not visible on screen. Triggering RAM open."
+            await asyncio.sleep(0.2 * (attempt + 1))
+
+        self.log.warning(
+            f"open_chat failed after {MAX_RETRIES} retries for '{name}' — WPP fallback."
         )
+        return await self._wpp_open_fallback(chat)
 
-        # Inject ambient human pointer telemetry before triggering magical DOM re-renders.
-        assert page is not None
-        await page.mouse.move(random.randint(150, 800), random.randint(150, 600))
-        await asyncio.sleep(random.uniform(1.8, 2.5))
+    async def _wpp_open_fallback(self, chat: ChatProtocol) -> bool:
+        """
+        WPP fire-and-forget fallback for open_chat.
+        Used when DOM click fails after MAX_RETRIES, or when formattedTitle is missing.
+        Logs as anomaly — repeated use flags session (Monitor/Metrics layer).
 
+        Uses mw: direct IIFE (not _evaluate_stealth) — same pattern as send_text_message.
+        window.WPP was deleted by Smash & Grab, so we access via _wpp_key descriptor.
+        """
+        wpp_key = self._bridge._wpp_key
+        self.log.warning(
+            f"[ANOMALY] WPP fallback open for {chat.id_serialized} — log for Monitor."
+        )
+        # Ambient pointer drift before magical DOM change (humanize)
+        await self.page.mouse.move(
+            random.randint(150, 800), random.randint(150, 500)
+        )
+        await asyncio.sleep(random.uniform(0.8, 1.5))
         try:
-            await self._bridge._evaluate_stealth(
-                f'window.WPP.chat.openChatBottom("{chat.id_serialized}")'
+            await self.page.evaluate(
+                f"mw:(() => {{"
+                f"  const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;"
+                f"  if (wpp) setTimeout(() => wpp.chat.openChatBottom('{chat.id_serialized}').catch(() => null), 0);"
+                f"}})()"
             )
             self._last_opened_chat_id = chat.id_serialized
             return True
-
         except Exception as e:
-            self.log.error(f"Failed to open chat {chat.id_serialized}: {e}")
+            self.log.error(f"WPP fallback open failed for {chat.id_serialized}: {e}")
             return False
+
+
 
     # ──────────────────────────────────────────────
     # RAM BASED METHODS

@@ -19,8 +19,15 @@ class WAJS_Scripts:
         """Check if WhatsApp session is authenticated."""
         return "wpp.conn.isAuthenticated()"
 
-    # ─────────────────────────────────────────────
-    # 2. CHAT METADATA
+    @classmethod
+    def get_active_chat_id(cls) -> str:
+        """
+        Returns the JID (_serialized) of the currently active/visible chat.
+        Sync read — no network, no side effects. Safe for post-click verification.
+        Returns null if no chat is open.
+        """
+        return "Promise.resolve(wpp.chat.getActiveChat()?.id?._serialized ?? null)"
+
     # ─────────────────────────────────────────────
 
     @classmethod
@@ -380,10 +387,21 @@ class WAJS_Scripts:
     # ─────────────────────────────────────────────
 
     @classmethod
-    def send_text_message(cls, chat_id: str, message: str) -> str:
-        """Pure api text send — no UI interaction required."""
+    def send_text_message(
+        cls, chat_id: str, message: str, options: dict | None = None
+    ) -> str:
+        """
+        Pure api text send — no UI interaction required.
+
+        Note: Fire-and-forget pattern. The WPP Promise is started but not awaited
+        in the bridge — sendTextMessage may wait for server ACK which can take
+        seconds in group chats. Bridge returns True immediately; send runs async.
+        """
         safe_msg = json.dumps(message)
-        return f"wpp.chat.sendTextMessage('{chat_id}', {safe_msg})"
+        safe_opts = json.dumps(options) if options else "{}"
+        # Comma operator: fires sendTextMessage (error silenced), returns true instantly.
+        return f"(wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_opts}).catch(() => null), true)"
+
 
     @classmethod
     def mark_is_read(cls, chat_id: str) -> str:

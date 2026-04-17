@@ -399,12 +399,14 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
     # NETWORK BASED METHODS
     # ──────────────────────────────────────────────
 
-    async def send_text_message(self, chat_id: str, message: str) -> Any:
+    async def send_text_message(
+        self, chat_id: str, message: str, options: Optional[dict] = None
+    ) -> Any:
         """
         [Type: NETWORK]
         Pure API text send. Sends the message entirely over the network.
         Use only when Playwright UI interaction logic is bypassing the actual input field.
         """
         return await self._bridge._evaluate_stealth(
-            WAJS_Scripts.send_text_message(chat_id, message)
+            WAJS_Scripts.send_text_message(chat_id, message, options=options)
         )

@@ -70,6 +70,7 @@ async def main():
         print(
             f"----------------Chat Opened name = {chat.formattedTitle} , id = {chat.id_serialized} \n"
         )
+        success = False
 
         # Process the msg Commands by some dummy commands.
         if msg.body == "!ping":
@@ -80,6 +81,7 @@ async def main():
                 text="**You have been Ponged!!!** \ud83c\udfd3\n_Reply from CamouChat Stealth Bridge_",
                 quoted_msg_id=msg.id_serialized,
             )
+            success = True
 
         elif msg.body == "!info":
             print(f"[*] Command triggered: !info from {msg.jid_From}")
@@ -90,7 +92,8 @@ async def main():
                 f"\u2022 Title: {chat.formattedTitle}\n"
                 f"\u2022 JID: {chat.id_serialized}\n"
                 f"\u2022 Unread: {chat.unreadCount}\n"
-                f"\u2022 Is Group: {chat.groupType}\n"
+                f"\u2022 GroupType: {chat.groupType}\n"
+                f"\u2022 GroupSafetyChecked Flag: {chat.groupSafetyChecked}\n"
                 f"\u2022 Is Archived: {chat.isArchived}\n"
             )
             await interaction.send_api_text(
@@ -98,17 +101,19 @@ async def main():
                 chat_id=msg.jid_From,
                 quoted_msg_id=msg.id_serialized,
             )
+            success = True
 
         elif msg.body == "!me":
             print("[*] Command triggered: !me (Identity Extraction)")
             # Tests identity and sender objects
-            sender_name = getattr(msg.senderObj, "formattedName", "Unknown")
-            push_name = getattr(msg.senderObj, "pushname", "Unknown")
+            sender_name = msg.author if chat.groupType != "DEFAULT" else chat.id_serialized
+            push_name = msg.pushname
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
-                text=f"\ud83d\udc64 *Identity Profile*\n\u2022 Name: {sender_name}\n\u2022 PushName: {push_name}",
+                text=f"\ud83d\udc64 *Identity Profile*\n\u2022 Sender_id: {sender_name}\n\u2022 PushName: {push_name}",
                 quoted_msg_id=msg.id_serialized,
             )
+            success = True
 
         elif msg.body and msg.body.startswith("!echo "):
             print("[*] Command triggered: !echo (Humanized Interaction)")
@@ -119,6 +124,7 @@ async def main():
                 quote=True,  # add quote using browser automation
                 send=True,  # send to send text or not.
             )
+            success = True
 
         elif msg.body and msg.body == "!media":
             print("[*] Command triggered: !media — requesting test image upload")
@@ -127,6 +133,7 @@ async def main():
                 text="📎 Send me any image, video, or audio to test media save+resend.",
                 quoted_msg_id=msg.id_serialized,
             )
+            success = True
 
         elif msg.msgtype in (
             "image",
@@ -177,6 +184,10 @@ async def main():
                 print("[✔] Media re-sent successfully.")
             else:
                 print("[!] add_media returned False — re-send may have failed.")
+            
+            success = True
+        
+        print("Success for this cmd completion = ", success)
 
     # Keep the script running to listen for events
     await new_msg()

@@ -70,7 +70,10 @@ class InteractionController(InteractionControllerProtocol):
     # ----------------------------------------------------
     # Humanize func
     async def send_api_text(
-        self, text: str, chat_id: str, quoted_msg_id: Optional[str] = None
+        self, text: str,
+        chat_id: str,
+        quoted_msg_id: Optional[str] = None,
+        mentionList: Optional[list[str]] = None
     ) -> bool:
         """
         Skips native OS usage & Directly send text via RAM Func.
@@ -82,6 +85,18 @@ class InteractionController(InteractionControllerProtocol):
             text : Text to be sent
             chat_id: Target chat ID
             quoted_msg_id: Optional message ID to quote/reply to
+                            it auto adds the quote via UI no need for physical interference.
+            mentionList: Optional list of message IDs to mention
+                        If you want to mention anyone if u message you must pass a list with 'abc@jid'
+                        example = mentionList = ['97xxxxxxxx@c.us', '99xxxxxxxx@c.us'] 
+                        
+
+            --------------------------------------------------------------------------------------------
+            IMPORTANT : Make sure the id passed in the quoted_msg_id or mentionList, Must be correct.
+                        Always double check it.
+                        It does not give any Error at back but raises functionally sus that id was not valid. 
+            --------------------------------------------------------------------------------------------
+
         Returns:
             bool: True if text is sent successfully.
         """
@@ -118,6 +133,8 @@ class InteractionController(InteractionControllerProtocol):
             options: dict[str, Any] = {"waitForAck": False}
             if quoted_msg_id:
                 options["quotedMsg"] = quoted_msg_id
+            if mentionList:
+                options["mentionedJidList"] = mentionList
 
             self.log.debug("Invoking bridge.send_text_message...")
             success = await bridge.send_text_message(

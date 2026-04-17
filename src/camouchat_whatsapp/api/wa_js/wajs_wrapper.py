@@ -1,9 +1,10 @@
 import asyncio
 import base64
-import json
+import inspect
 import os
+import secrets
 import time
-import uuid
+import json
 from logging import Logger, LoggerAdapter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -13,7 +14,6 @@ from playwright.async_api import Page
 from camouchat_whatsapp.exceptions import WAJSError
 from camouchat_whatsapp.logger import w_logger
 
-# Todo , add logger later
 from .wajs_scripts import WAJS_Scripts
 
 
@@ -22,60 +22,74 @@ class WapiWrapper:
     The Bridge connecting Playwright (Python) to wa-js (Browser).
 
     Architecture:
-        - Reads data via a CustomEvent bridge (Isolated World → Main World → Isolated World).
-        - All WPP calls route through the hidden `window.__react_devtools_hook` reference
-          (WPP is deleted from window after injection to avoid Meta's integrity scanners).
-        - Errors are swallowed in JS, formatted, and re-raised cleanly as WAJSError in Python.
+        - All WPP calls route through a per-session randomized hidden key
+          (e.g. `window.__react_devtools_a3f9c1b2`) — non-enumerable, non-configurable.
+          WPP is deleted from `window.WPP` after injection to evade Meta integrity scanners.
+        - `_evaluate_stealth` executes JS via `mw:` IIFE directly in Main World.
+          Returns structured `{data, success, error}` — Python raises WAJSError on failure.
     """
 
     def __init__(self, page: Page, log: Optional[Union[LoggerAdapter, Logger]] = None):
         self.page = page
         self.log = log or w_logger
+        self._wpp_key: str = ""  # per-session rotated WPP handle key
         self._bridge_key: Optional[str] = None
         self._queue_key: Optional[str] = None
         self._bridge_active: bool = False
 
     async def _evaluate_stealth(self, js_fragment: str) -> Any:
         """
-        Executes a JS expression inside the Main World via a CustomEvent bridge.
+        Executes a JS fragment in the real Main World via a script-tag injection bridge.
+
+        Why NOT `mw:` async IIFE:
+            Camoufox's `mw:` runs code in Main World, but does NOT await Promises
+            back through CDP — async IIFE results serialize as {} (unresolved Promise).
+            Script tags always execute in Main World AND can dispatch their async result
+            back via CustomEvent, which the Isolated World Promise catches cleanly.
 
         Flow:
-            1. Isolated World sets up a one-shot listener for a unique CustomEvent.
-            2. A <script> tag is injected into the DOM (runs in Main World).
-            3. Main World evaluates `js_fragment` with access to `window.__react_devtools_hook`.
-            4. Result or error is dispatched back as a CustomEvent detail.
-            5. Isolated World receives it and resolves the Promise back to Python.
+            1. Isolated World sets up a one-shot CustomEvent listener (per-call secrets ID).
+            2. A <script> tag is injected into the DOM — executes async IIFE in Main World.
+            3. Main World resolves the WPP call and dispatches {success, data, error}.
+            4. Isolated World catches it, resolves the outer Promise back to Python.
 
         Args:
-            js_fragment: A raw JS expression/IIFE that may be async.
-                         Has access to `const wpp = window.__react_devtools_hook;`
+            js_fragment: Raw JS expression. `const wpp` is injected automatically.
 
         Returns:
-            Deserialized Python object from the JSON result.
+            Deserialized Python object (whatever the fragment evaluates to).
 
         Raises:
-            WAJSError: If JS throws or the bridge returns an error status.
+            WAJSError: On JS error, missing WPP handle, or 30s timeout.
         """
-        req_id = f"camou_{uuid.uuid4().hex}"
+        if not self._wpp_key:
+            raise WAJSError("WPP handle key not set — was wait_for_ready() called?")
+
+        frame = inspect.currentframe()
+        caller = frame.f_back.f_code.co_name if frame and frame.f_back else "unknown"
+
+        req_id = f"_cr{secrets.token_hex(5)}"  # per-call, no predictable prefix
+        wpp_key = self._wpp_key
 
         bridge_script = f"""() => {{
             return new Promise((resolve) => {{
                 let resolved = false;
-                
-                // 1. Isolated World: listen for result dispatched from the Main World
+
+                // Isolated World: one-shot listener for the Main World result
                 window.addEventListener('{req_id}', (e) => {{
                     resolved = true;
                     resolve(e.detail);
                 }}, {{ once: true }});
 
-                // 2. Timeout guard in Isolated World (30s)
+                // 30s timeout guard
                 setTimeout(() => {{
-                    if (!resolved) {{
-                        resolve({{ status: 'error', message: 'Stealth Bridge Timeout (30s) - Main World did not respond.' }});
-                    }}
+                    if (!resolved) resolve({{
+                        success: false, data: null,
+                        error: 'Bridge timeout (30s) — Main World did not respond.'
+                    }});
                 }}, 30000);
 
-                // 3. Build and inject a <script> tag into the real DOM (executes in Main World)
+                // Inject <script> tag — always runs in Main World regardless of eval context
                 const script = document.createElement('script');
                 const nonceEl = document.querySelector('script[nonce]');
                 if (nonceEl) script.setAttribute('nonce', nonceEl.nonce);
@@ -83,16 +97,20 @@ class WapiWrapper:
                 script.textContent = `
                     (async () => {{
                         try {{
-                            const wpp = window.__react_devtools_hook;
-                            if (!wpp) throw new Error("Hidden WPP handle missing. Was wait_for_ready() called?");
-
+                            const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;
+                            if (!wpp) {{
+                                window.dispatchEvent(new CustomEvent('{req_id}', {{
+                                    detail: {{ success: false, data: null, error: 'WPP handle missing ({wpp_key}).' }}
+                                }}));
+                                return;
+                            }}
                             const res = await ({js_fragment});
                             window.dispatchEvent(new CustomEvent('{req_id}', {{
-                                detail: {{ status: 'success', data: res }}
+                                detail: {{ success: true, data: res, error: null }}
                             }}));
                         }} catch (err) {{
                             window.dispatchEvent(new CustomEvent('{req_id}', {{
-                                detail: {{ status: 'error', message: err.toString() }}
+                                detail: {{ success: false, data: null, error: err.toString() }}
                             }}));
                         }}
                     }})();
@@ -102,17 +120,17 @@ class WapiWrapper:
             }});
         }}"""
 
-        response = await self.page.evaluate(bridge_script)
+        raw = await self.page.evaluate(bridge_script)
 
-        if not response or not isinstance(response, dict):
-            raise WAJSError(f"Invalid stealth bridge response: {response}")
+        if not isinstance(raw, dict):
+            raise WAJSError(f"[{caller}] _evaluate_stealth: unexpected response: {raw!r}")
+        if not raw.get("success"):
+            err = raw.get("error", "Unknown JS error")
+            self.log.error(f"[{caller}] WA-JS error: {err}")
+            raise WAJSError(f"[{caller}] {err}")
 
-        if response.get("status") == "error":
-            err_msg = response.get("message", "Unknown JS error in wa-js execution")
-            self.log.error(f"WA-JS Error: {err_msg}")
-            raise WAJSError(err_msg)
+        return raw.get("data")
 
-        return response.get("data")
 
     # ─────────────────────────────────────────────
     # 1. SETUP & LIFECYCLE
@@ -121,9 +139,10 @@ class WapiWrapper:
     async def wait_for_ready(self, timeout_ms: float = 60000) -> bool:
         """
         Injects wppconnect-wa.js into the Main World, waits for WPP to init,
-        then performs the 'Smash & Grab' — hides WPP under a non-enumerable
-        property (`window.__react_devtools_hook`) and deletes `window.WPP`
-        to evade Meta's integrity.js scanners.
+        then performs the 'Smash & Grab':
+          - Generates a per-session randomized key (e.g. `__react_devtools_a3f9c1b2`).
+          - Hides WPP under that non-enumerable, non-configurable, non-writable key.
+          - Deletes `window.WPP` to evade Meta's integrity.js scanners.
         """
         js_path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "wppconnect-wa.js")
@@ -167,41 +186,39 @@ class WapiWrapper:
                         "mw:window.WPP && window.WPP.isReady === true"
                     )
                     if is_ready:
-                        # Hide WPP under a non-enumerable, non-configurable,
-                        # non-writable property so:
-                        #   - Object.keys(window)   → WPP invisible
-                        #   - Object.defineProperty  → cannot redefine
-                        #   - window.__react_devtools_hook = null → rejected
-                        await self.page.evaluate("""mw:(() => {
-                            Object.defineProperty(window, "__react_devtools_hook", {
+                        wpp_key = f"__react_devtools_{secrets.token_hex(4)}"
+
+                        # override properties-----------
+                        await self.page.evaluate(f"""mw:(() => {{
+                            Object.defineProperty(window, '{wpp_key}', {{
                                 value: window.WPP,
                                 enumerable: false,
                                 configurable: false,
                                 writable: false
-                            });
+                            }});
                             delete window.WPP;
-                        })()""")
+                        }})()""")
 
-                        # Confirm WPP is gone from enumerable keys and
-                        # the hidden handle is alive and non-null.
-                        sweep_ok = await self.page.evaluate("""mw:(() => {
-                            const keys = Object.keys(window);
-                            const wppGone = !keys.includes('WPP');
-                            const handleOk = typeof window.__react_devtools_hook === 'object'
-                                && window.__react_devtools_hook !== null;
-                            return wppGone && handleOk;
-                        })()""")
+                        # Verify WPP is deleted + handle is live.
+                        sweep_ok = await self.page.evaluate(f"""mw:(() => {{
+                            const wppGone = !Object.keys(window).includes('WPP');
+                            const desc = Object.getOwnPropertyDescriptor(window, '{wpp_key}');
+                            const handleOk = desc && typeof desc.value === 'object' && desc.value !== null;
+                            return wppGone && !!handleOk;
+                        }})()""")
 
                         if not sweep_ok:
-                            self.log.error(
+                            raise WAJSError(
                                 "Smash & Grab verification FAILED — "
                                 "WPP still enumerable or handle is null."
                             )
-                            return False
 
+                        self._wpp_key = wpp_key
                         self.log.info(
-                            "WPP engine integrated! Global 'window.WPP' annihilated → "
-                            "stealth handle locked (enumerable=false, configurable=false, writable=false)."
+                            "WPP engine integrated! window.WPP annihilated → stealth handle locked."
+                        )
+                        self.log.debug(
+                            f"wpp_key='{wpp_key[:20]}...' (enumerable=false, configurable=false, writable=false)."
                         )
                         return True
 
@@ -274,10 +291,11 @@ class WapiWrapper:
         }})()""")
 
         # Register wpp.on listener — entirely in Main World via mw:.
+        wpp_key = self._wpp_key
         await self.page.evaluate(f"""mw:(async () => {{
-            const wpp = window.__react_devtools_hook;
+            const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;
             if (!wpp) {{
-                console.warn('CamouBridge: WPP handle missing.');
+                console.warn('CamouBridge: WPP handle missing at key {wpp_key}.');
                 return;
             }}
             if (window['{guard_key}']) return;
@@ -295,7 +313,7 @@ class WapiWrapper:
 
         self._bridge_active = True
         self.log.info(
-            f"Stealth DOM Bridge active. queue='{queue_key}' (hidden, non-enumerable) | Mode: mw: poll"
+            f"Stealth DOM Bridge active. wpp_key='{wpp_key}' queue='{queue_key}' (hidden, non-enumerable) | Mode: mw: poll"
         )
 
     async def poll_message_queue(self) -> list:
@@ -482,22 +500,31 @@ class WapiWrapper:
         self, chat_id: str, message: str, options: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
-        Pure api text send (Tier 3 fallback).
-        Use only when Playwright UI interaction fails.
+        Pure api text send — fire-and-forget via mw: direct eval.
+
+        Why bypass _evaluate_stealth:
+            sendTextMessage may wait for server ACK or perform async lookups
+            (e.g. quoted message resolution) that make the bridge time out.
+            mw: sync IIFE + setTimeout(0) fires the call and returns immediately.
+
+        Options default: waitForAck=False so WPP doesn't block on delivery signal.
         """
         try:
             safe_msg = json.dumps(message)
             safe_options = json.dumps(options or {"waitForAck": False})
+            wpp_key = self._wpp_key
             await self.page.evaluate(
                 f"mw:(() => {{"
-                f"  const wpp = window.__react_devtools_hook;"
-                f"  setTimeout(() => wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_options}).catch(() => null), 0);"
+                f"  const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;"
+                f"  if (wpp) setTimeout(() => wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_options}).catch(() => null), 0);"
+                f"  else console.warn('[CamouChat] send_text_message: WPP handle missing ({wpp_key})');"
                 f"}})()"
             )
             return True
         except Exception as e:
             self.log.warning(f"send_text_message failed: {e}")
             return False
+
 
     async def mark_is_read(self, chat_id: str) -> bool:
         """Force-mark a chat as read. Only call when using Tier 3 pure api mode."""
