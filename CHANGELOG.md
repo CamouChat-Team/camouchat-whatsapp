@@ -6,8 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.7.3] — Unreleased
 
-## [0.7.0] — Unreleased
+### Added
+- Added smoke test script for JS synthetic clicks vs Camoufox physical humanized clicks.
+- Added `mentionList` parameter support to send mentions via `send_api_text()`.
+
+### Fixed
+- Fixed `open_chat` reliability under heavy load using enhanced retry logic, mouse micro-corrections, and virtualized `scrollIntoView` (fully supports headless/Xvfb).
+- Hardened API stealth engine bridge execution, resolving async promise timeouts by utilizing sync fire-and-forget `mw:` interactions & success - error dict.
+
+## [0.7.2] — 2026-04-18
+
+### Fixed
+- Fixed Quick Start code example in README.
+
+## [0.7.1] — 2026-04-15
+
+### Fixed
+- Updated README documentation.
+
+---
+
+## [0.7.0] — 2026-04-15
 
 This release marks the extraction of the WhatsApp plugin from the original CamouChat monorepo into a standalone, independently versioned package.
 

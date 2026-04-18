@@ -106,7 +106,9 @@ async def main():
         elif msg.body == "!me":
             print("[*] Command triggered: !me (Identity Extraction)")
             # Tests identity and sender objects
-            sender_name = msg.author if chat.groupType != "DEFAULT" else chat.id_serialized
+            sender_name = (
+                msg.author if chat.groupType != "DEFAULT" else chat.id_serialized
+            )
             push_name = msg.pushname
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
@@ -184,9 +186,9 @@ async def main():
                 print("[✔] Media re-sent successfully.")
             else:
                 print("[!] add_media returned False — re-send may have failed.")
-            
+
             success = True
-        
+
         print("Success for this cmd completion = ", success)
 
     # Keep the script running to listen for events

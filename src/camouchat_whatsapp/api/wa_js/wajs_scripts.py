@@ -402,7 +402,6 @@ class WAJS_Scripts:
         # Comma operator: fires sendTextMessage (error silenced), returns true instantly.
         return f"(wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_opts}).catch(() => null), true)"
 
-
     @classmethod
     def mark_is_read(cls, chat_id: str) -> str:
         """Force-mark a chat as read at the api level."""

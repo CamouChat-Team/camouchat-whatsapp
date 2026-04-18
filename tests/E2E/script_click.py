@@ -65,7 +65,9 @@ async def main():
         };
     }""")
     print(f"[Phase 1] Result: {result}")
-    print("         → If mouse did NOT move: JS click() is synthetic (no humanization).")
+    print(
+        "         → If mouse did NOT move: JS click() is synthetic (no humanization)."
+    )
 
     await asyncio.sleep(2)
 
@@ -82,7 +84,9 @@ async def main():
         center_x = rect_data["x"] + rect_data["width"] / 2
         center_y = rect_data["y"] + rect_data["height"] / 2
         print(f"[Phase 2] Element bounding rect: {rect_data}")
-        print(f"[Phase 2] Clicking center at ({center_x:.1f}, {center_y:.1f}) via page.mouse...")
+        print(
+            f"[Phase 2] Clicking center at ({center_x:.1f}, {center_y:.1f}) via page.mouse..."
+        )
         # Playwright humanize moves mouse in natural curve to this position
         await page.mouse.move(center_x, center_y)
         await asyncio.sleep(0.1)

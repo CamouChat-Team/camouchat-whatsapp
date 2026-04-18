@@ -123,14 +123,15 @@ class WapiWrapper:
         raw = await self.page.evaluate(bridge_script)
 
         if not isinstance(raw, dict):
-            raise WAJSError(f"[{caller}] _evaluate_stealth: unexpected response: {raw!r}")
+            raise WAJSError(
+                f"[{caller}] _evaluate_stealth: unexpected response: {raw!r}"
+            )
         if not raw.get("success"):
             err = raw.get("error", "Unknown JS error")
             self.log.error(f"[{caller}] WA-JS error: {err}")
             raise WAJSError(f"[{caller}] {err}")
 
         return raw.get("data")
-
 
     # ─────────────────────────────────────────────
     # 1. SETUP & LIFECYCLE
@@ -524,7 +525,6 @@ class WapiWrapper:
         except Exception as e:
             self.log.warning(f"send_text_message failed: {e}")
             return False
-
 
     async def mark_is_read(self, chat_id: str) -> bool:
         """Force-mark a chat as read. Only call when using Tier 3 pure api mode."""

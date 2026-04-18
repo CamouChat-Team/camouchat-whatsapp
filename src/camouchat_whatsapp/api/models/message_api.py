@@ -99,8 +99,8 @@ class MessageModelAPI(MessageProtocol):
         1. If a field is None it most likely means the webpack patch did not expose that property,
         or WhatsApp silently changed internal key names in a recent update.
 
-        2. 'ack', 'timestamp', and delivery-state fields reflect the snapshot at the moment chat.new_message fired. 
-        Real-time updates (ack=2/3/4) arrive via separate msg.ack events and are not captured here. 
+        2. 'ack', 'timestamp', and delivery-state fields reflect the snapshot at the moment chat.new_message fired.
+        Real-time updates (ack=2/3/4) arrive via separate msg.ack events and are not captured here.
         Re-fetch by id if current delivery state is needed.
     """
 

@@ -65,7 +65,9 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
 
         name: str | None = getattr(chat, "formattedTitle", None)
         if not name:
-            self.log.warning(f"No formattedTitle for {chat.id_serialized} — going direct to fallback.")
+            self.log.warning(
+                f"No formattedTitle for {chat.id_serialized} — going direct to fallback."
+            )
             return await self._wpp_open_fallback(chat)
 
         safe_title = json.dumps(name)  # handles apostrophes, quotes, emoji
@@ -100,7 +102,9 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
             # Step 1: scroll into view + initial rect
             rect = await page.evaluate(_find_js)
             if rect is None:
-                self.log.debug(f"'{name}' not in #pane-side DOM (attempt {attempt + 1})")
+                self.log.debug(
+                    f"'{name}' not in #pane-side DOM (attempt {attempt + 1})"
+                )
                 await asyncio.sleep(0.1 * (attempt + 1))
                 continue
 
@@ -112,7 +116,9 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
             # Step 3: re-query — React may have shifted the row during mouse travel
             rect2 = await page.evaluate(_find_js)
             if rect2 is None:
-                self.log.debug(f"'{name}' vanished after mouse arc (attempt {attempt + 1})")
+                self.log.debug(
+                    f"'{name}' vanished after mouse arc (attempt {attempt + 1})"
+                )
                 await asyncio.sleep(0.15 * (attempt + 1))
                 continue
 
@@ -159,9 +165,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
             f"[ANOMALY] WPP fallback open for {chat.id_serialized} — log for Monitor."
         )
         # Ambient pointer drift before magical DOM change (humanize)
-        await self.page.mouse.move(
-            random.randint(150, 800), random.randint(150, 500)
-        )
+        await self.page.mouse.move(random.randint(150, 800), random.randint(150, 500))
         await asyncio.sleep(random.uniform(0.8, 1.5))
         try:
             await self.page.evaluate(
@@ -175,8 +179,6 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
         except Exception as e:
             self.log.error(f"WPP fallback open failed for {chat.id_serialized}: {e}")
             return False
-
-
 
     # ──────────────────────────────────────────────
     # RAM BASED METHODS
