@@ -11,10 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added smoke test script for JS synthetic clicks vs Camoufox physical humanized clicks.
 - Added `mentionList` parameter support to send mentions via `send_api_text()`.
+- fallback check for newsletter/channels in open_chat()
+- Added storage decorator @on_storage inside @on_newMsg decorator , added RegistryConfig to handle these inside @on_newMsg.
 
 ### Fixed
 - Fixed `open_chat` reliability under heavy load using enhanced retry logic, mouse micro-corrections, and virtualized `scrollIntoView` (fully supports headless/Xvfb).
-- Hardened API stealth engine bridge execution, resolving async promise timeouts by utilizing sync fire-and-forget `mw:` interactions & success - error dict.
+- Hardened API stealth engine bridge execution, enhanced _evaluate_stealth with success , error dict, and some tweaks.
+- SqlalchmeyStorage is now uses new ProfileManager Structure , and dialect can be changed with db_credendials.
+- scripts added and fixed in order to test new Hooks.
 
 ## [0.7.2] — 2026-04-18
 

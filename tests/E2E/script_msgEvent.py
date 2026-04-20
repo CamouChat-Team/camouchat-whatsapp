@@ -6,18 +6,11 @@ import asyncio
 
 from camouchat_browser import (
     BrowserConfig,
-    BrowserForge,
     CamoufoxBrowser,
     ProfileManager,
 )
-from camouchat_core import Platform
-from camouchat_whatsapp import (
-    FileTyped,
-    Login,
-    MediaController,
-    MediaType,
-    WebSelectorConfig,
-)
+from camouchat_core import Platform, FileTyped, MediaType
+from camouchat_whatsapp import Login, MediaController
 
 
 async def main():
@@ -26,23 +19,26 @@ async def main():
     profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
 
     # ── 2. Browser ─────────────────────────────────────────────────────────────
-    browser_forge = BrowserForge()
+    # browser_forge = BrowserForge() # Used to Generate Random Fingerprints for the browser ,
+    # Also handles automatic generation of fingerprints if not provided.
     config = BrowserConfig.from_dict(
         {
             "platform": Platform.WHATSAPP,
-            "locale": "en-US",
-            "enable_cache": False,
+            # "locale": "en-US",
+            # "enable_cache": False,
             "headless": False,
-            "fingerprint_obj": browser_forge,
-            "geoip": False,
+            # "fingerprint_obj": browser_forge, changed to fingerprint, also default auto sets.
+            # "geoip": False,
         }
+        # Other Commented Values are default Testing based, if used for real script ,
+        #  considering updating them Proxy based requirements. etc.
     )
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
 
     # ── 3. Login (reuses session) ───────────────────────────────────────────────
-    ui = WebSelectorConfig(page=page)
-    login = Login(page=page, UIConfig=ui)
+    # ui = WebSelectorConfig(page=page)
+    login = (Login(page=page),)  # UIConfig=ui) # default setup can take.
     await login.login(method=0)  # Auto Handles saved Persistence.
 
     # ── 4. Message event hook ───────────────────────────────────────────────────
@@ -54,10 +50,12 @@ async def main():
     )
 
     wapi = WapiSession(page=page)
-    interaction = InteractionController(page=page, ui_config=ui, wapi=wapi)
-    media = MediaController(page=page, UIConfig=ui, wapi=wapi, profile=profile)
+    interaction = InteractionController(page=page, wapi=wapi)  # , ui_config=ui,
+    media = MediaController(page=page, wapi=wapi, profile=profile)  # ,  UIConfig=ui,
 
-    @on_newMsg(wapi_session=wapi)  # Pass the Wapi Session object here
+    # Pass the Wapi Session object here
+    # Also if profile passed it it will auto save msgs to Storage.
+    @on_newMsg(wapi_session=wapi, profile=profile)
     async def new_msg(msg: MessageModelAPI):
         print("\n --------- New Msg Arrived ───────────────────────────────────")
         print(msg, "\n")

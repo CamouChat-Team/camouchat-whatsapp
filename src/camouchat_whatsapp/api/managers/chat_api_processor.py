@@ -58,6 +58,14 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
         if chat is None:
             raise ValueError("Chat is None, cannot open chat")
 
+        # Design Decision: Ignore Newsletters/Channels - DOM interaction unstable
+        if "@newsletter" in str(chat.id_serialized):
+            self.log.warning(
+                f"Skipping open_chat for {chat.id_serialized} — Newsletters/Channels "
+                "not supported via DOM interaction."
+            )
+            return False
+
         # Fast path: ID cache + WPP verify
         if chat.id_serialized == self._last_opened_chat_id:
             self.log.debug(f"Chat {chat.id_serialized} matches last-opened cache.")
@@ -99,7 +107,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
         for attempt in range(MAX_RETRIES):
             self.log.debug(f"open_chat attempt {attempt + 1}/{MAX_RETRIES} — '{name}'")
 
-            # Step 1: scroll into view + initial rect
+            # scroll into view + initial rect
             rect = await page.evaluate(_find_js)
             if rect is None:
                 self.log.debug(
@@ -108,12 +116,12 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
                 await asyncio.sleep(0.1 * (attempt + 1))
                 continue
 
-            # Step 2: humanized arc to estimated center (Camoufox humanize active)
+            # humanized arc to estimated center (Camoufox humanize active)
             jitter = random.uniform(-12, 12)
             await page.mouse.move(rect["cx"] + jitter, rect["cy"] + jitter)
             await asyncio.sleep(random.uniform(0.08, 0.2))
 
-            # Step 3: re-query — React may have shifted the row during mouse travel
+            # re-query — React may have shifted the row during mouse travel
             rect2 = await page.evaluate(_find_js)
             if rect2 is None:
                 self.log.debug(
@@ -122,12 +130,12 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
                 await asyncio.sleep(0.15 * (attempt + 1))
                 continue
 
-            # Step 4: micro-correction + physical isTrusted click
+            # micro-correction + physical isTrusted click
             await page.mouse.move(rect2["cx"], rect2["cy"], steps=3)
             await asyncio.sleep(random.uniform(0.05, 0.12))
             await page.mouse.click(rect2["cx"], rect2["cy"])
 
-            # Step 5: WPP verify (read-only)
+            # WPP verify (read-only)
             await asyncio.sleep(0.12)
             try:
                 active_id = await self._bridge._evaluate_stealth(

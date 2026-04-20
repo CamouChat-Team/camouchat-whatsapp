@@ -53,17 +53,17 @@ class InteractionController(InteractionControllerProtocol):
     def __init__(
         self,
         page: Page,
-        ui_config: WebSelectorConfig,
+        ui_config: Optional[WebSelectorConfig] = None,
         log: Optional[Union[LoggerAdapter, Logger]] = None,
         wapi: Optional[WapiSession] = None,
     ) -> None:
         if hasattr(self, "_initialized") and self._initialized:
             return
-        self.page = page
-        self.ui_config = ui_config
-        self.log = log or w_logger
-        if self.page is None:
+        if page is None:
             raise ValueError("page must not be None")
+        self.page = page
+        self.ui_config = ui_config or WebSelectorConfig(page=page)
+        self.log = log or w_logger
         self._wapi: Optional[WapiSession] = wapi
         self._initialized = True
 

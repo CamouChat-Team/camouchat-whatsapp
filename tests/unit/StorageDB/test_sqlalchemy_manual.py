@@ -50,9 +50,10 @@ async def test_basic_operations():
     # Create storage with temporary database
     queue = asyncio.Queue()
     storage = SQLAlchemyStorage(
+        profile=None,  # type: ignore
         queue=queue,
         log=log,
-        database_url="sqlite+aiosqlite:///test_messages.db",
+        db_credentials={"storage_type": "sqlite", "database_path": "test_messages.db"},
         batch_size=5,
         flush_interval=1.0,
     )
@@ -103,8 +104,10 @@ async def test_profile_integration():
 
     # Create profile
     pm = ProfileManager()
+    from camouchat_core import Platform
+
     print("\n📝 Creating test profile...")
-    profile = pm.create_profile("whatsapp", "sqlalchemy_test")
+    profile = pm.create_profile(Platform.WHATSAPP, "sqlalchemy_test")
 
     print("\n📁 Profile paths:")
     print(f"  - Profile dir: {profile.profile_dir}")
@@ -117,7 +120,7 @@ async def test_profile_integration():
     )
 
     print("\n✅ Created storage from profile:")
-    print(f"  - Database URL: {storage.database_url}")
+    print(f"  - Database Credentials: {storage.db_credentials}")
 
     async with storage:
         # Add test messages
@@ -137,7 +140,7 @@ async def test_profile_integration():
         print(f"✅ Stored {len(all_msgs)} messages in profile database")
 
         # Check database file exists
-        if profile.database_path.exists():
+        if profile.database_path and profile.database_path.exists():
             size = profile.database_path.stat().st_size
             print(f"✅ Database file created: {size} bytes")
 
@@ -150,7 +153,7 @@ async def test_profile_integration():
 
     # Ignore errors so it doesn't fail the build
     try:
-        pm.delete_profile("whatsapp", "sqlalchemy_test", force=True)
+        pm.delete_profile(profile, force=True)
     except Exception as e:
         print(f"Failed to delete profile (Windows file lock?): {e}")
 
@@ -166,9 +169,10 @@ async def test_message_processor_compatibility():
 
     queue = asyncio.Queue()
     storage = SQLAlchemyStorage(
+        profile=None,  # type: ignore
         queue=queue,
         log=log,
-        database_url="sqlite+aiosqlite://",
+        db_credentials={"storage_type": "sqlite", "database_path": ":memory:"},
         batch_size=1,
         flush_interval=0.1,
     )
@@ -222,9 +226,10 @@ async def test_batch_performance():
 
     queue = asyncio.Queue()
     storage = SQLAlchemyStorage(
+        profile=None,  # type: ignore
         queue=queue,
         log=log,
-        database_url="sqlite+aiosqlite:///batch_test.db",
+        db_credentials={"storage_type": "sqlite", "database_path": "batch_test.db"},
         batch_size=50,
         flush_interval=2.0,
     )

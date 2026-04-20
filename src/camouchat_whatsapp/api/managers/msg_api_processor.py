@@ -173,7 +173,6 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
             # ciphertext = The message arrived on the wire before WA finished E2E decryption.
             # WA will re-fire the same id_serialized once decrypted with the real type.
             # We pass it through as-is (type='ciphertext') so the caller can decide to
-            # skip or queue it.  DO NOT mutate type→'viewonce' here — that was incorrect;
             # view-once is a separate concept controlled by the isViewOnce flag.
             if raw.get("type") == "ciphertext":
                 self.log.debug(

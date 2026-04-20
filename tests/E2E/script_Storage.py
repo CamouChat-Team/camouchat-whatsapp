@@ -3,7 +3,6 @@ import traceback
 
 from camouchat_browser import (
     BrowserConfig,
-    BrowserForge,
     CamoufoxBrowser,
     ProfileManager,
 )
@@ -21,23 +20,17 @@ from camouchat_whatsapp import (
 async def main():
     # ── Setup Storage (Once) ───────────────────────────────────────────────
     pm = ProfileManager()
-    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
+    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="work")
+    print("profile path : ", profile.profile_dir)
     # Initialize storage once outside the loop
-    storage = SQLAlchemyStorage.from_profile(profile=profile, queue=asyncio.Queue())
+    storage = SQLAlchemyStorage.from_profile(profile=profile)
     await storage.start()
 
     save_ids = []
     msgs_batch = []
 
     # ── Browser & Login ────────────────────────────────────────────────────
-    browser_forge = BrowserForge()
-    config = BrowserConfig.from_dict(
-        {
-            "platform": Platform.WHATSAPP,
-            "headless": False,
-            "fingerprint_obj": browser_forge,
-        }
-    )
+    config = BrowserConfig.from_dict({"platform": Platform.WHATSAPP, "headless": False})
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
     ui = WebSelectorConfig(page=page)
@@ -95,9 +88,7 @@ async def main():
             print(f"E-Nonce: {msg.get('encryption_nonce')}")
             print("-----------------------")
 
-        import os
-
-        await CamoufoxBrowser.close_browser_by_pid(os.getpid())
+        await CamoufoxBrowser.close_browser_by_profile(profile=profile)
 
 
 if __name__ == "__main__":

@@ -88,11 +88,8 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
     ):
         if hasattr(self, "_initialized") and self._initialized:
             return
-        ui_config = ui_config or kwargs.pop("UIConfig", None)
-        if ui_config is None:
-            raise ValueError("ui_config must not be None")
         self.page = page
-        self.ui_config = ui_config
+        self.ui_config = ui_config or WebSelectorConfig(page=page)
         self.log = log or w_logger
         if self.page is None:
             raise ValueError("page must not be None")

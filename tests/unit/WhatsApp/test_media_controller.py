@@ -4,7 +4,7 @@ Tests cover menu interaction, media attachment, and file handling.
 """
 
 import logging
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import Mock, AsyncMock, MagicMock
 
 import pytest
 from playwright.async_api import (
@@ -41,12 +41,17 @@ def mock_page():
 
 @pytest.fixture
 def mock_ui_config():
-    return Mock(spec=WebSelectorConfig)
+    config = MagicMock(spec=WebSelectorConfig)
+    config.plus_rounded_icon = MagicMock()
+    config.photos_videos = MagicMock()
+    config.audio = MagicMock()
+    config.document = MagicMock()
+    return config
 
 
 @pytest.fixture
 def media_capable_instance(mock_page, mock_logger, mock_ui_config):
-    return MediaController(page=mock_page, log=mock_logger, UIConfig=mock_ui_config)
+    return MediaController(page=mock_page, log=mock_logger, ui_config=mock_ui_config)
 
 
 # ============================================================================
@@ -57,14 +62,14 @@ def media_capable_instance(mock_page, mock_logger, mock_ui_config):
 @pytest.mark.asyncio
 async def test_init_page_none(mock_logger, mock_ui_config):
     with pytest.raises(ValueError, match="page must not be None"):
-        MediaController(page=None, log=mock_logger, UIConfig=mock_ui_config)
+        MediaController(page=None, log=mock_logger, ui_config=mock_ui_config)
 
 
 @pytest.mark.asyncio
 async def test_menu_clicker_success(media_capable_instance, mock_ui_config):
     """Test menu_clicker opens the menu successfully."""
-    mock_icon = AsyncMock(spec=Locator)
-    mock_icon.element_handle.return_value = AsyncMock()
+    mock_icon = MagicMock(spec=Locator)
+    mock_icon.element_handle = AsyncMock(return_value=AsyncMock())
     mock_ui_config.plus_rounded_icon.return_value = mock_icon
 
     await media_capable_instance.menu_clicker()
@@ -76,8 +81,8 @@ async def test_menu_clicker_success(media_capable_instance, mock_ui_config):
 @pytest.mark.asyncio
 async def test_menu_clicker_timeout(media_capable_instance, mock_ui_config):
     """Test menu_clicker handles timeout and presses escape."""
-    mock_icon = AsyncMock(spec=Locator)
-    mock_icon.element_handle.side_effect = PlaywrightTimeoutError("Timeout")
+    mock_icon = MagicMock(spec=Locator)
+    mock_icon.element_handle = AsyncMock(side_effect=PlaywrightTimeoutError("Timeout"))
     mock_ui_config.plus_rounded_icon.return_value = mock_icon
 
     with pytest.raises(WhatsappMediaError, match="Time out while clicking menu"):
@@ -96,8 +101,9 @@ async def test_add_media_success(media_capable_instance, mock_ui_config, tmp_pat
 
     media_capable_instance.menu_clicker = AsyncMock()
 
-    mock_target = AsyncMock(spec=Locator)
-    mock_target.is_visible.return_value = True
+    mock_target = MagicMock(spec=Locator)
+    mock_target.is_visible = AsyncMock(return_value=True)
+    mock_target.click = AsyncMock()
     mock_ui_config.photos_videos.return_value = mock_target
 
     # Setup FileChooser mock
@@ -148,8 +154,9 @@ async def test_add_media_file_not_found(media_capable_instance, mock_ui_config):
     """Test add_media raises error for invalid file path."""
     media_capable_instance.menu_clicker = AsyncMock()
 
-    mock_target = AsyncMock(spec=Locator)
-    mock_target.is_visible.return_value = True
+    mock_target = MagicMock(spec=Locator)
+    mock_target.is_visible = AsyncMock(return_value=True)
+    mock_target.click = AsyncMock()
     mock_ui_config.photos_videos.return_value = mock_target
 
     # Setup CM — value must be an awaitable attribute (Future)
@@ -183,6 +190,10 @@ async def test_add_media_file_not_found(media_capable_instance, mock_ui_config):
 @pytest.mark.asyncio
 async def test_get_operational_locators(media_capable_instance, mock_ui_config):
     """Test _getOperational returns correct locator type."""
+    mock_ui_config.photos_videos.return_value = MagicMock(spec=Locator)
+    mock_ui_config.audio.return_value = MagicMock(spec=Locator)
+    mock_ui_config.document.return_value = MagicMock(spec=Locator)
+
     # IMAGE
     await media_capable_instance._getOperational(MediaType.IMAGE)
     mock_ui_config.photos_videos.assert_called_once()

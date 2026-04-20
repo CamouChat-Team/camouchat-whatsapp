@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
-from camouchat_browser import ProfileInfo
+from camouchat_browser import ProfileInfo, DirectoryManager
 from camouchat_whatsapp.exceptions import WhatsAppStorageError
 from camouchat_core import MessageProtocol, StorageProtocol
 from .models import Base, Message
@@ -46,19 +46,21 @@ class SQLAlchemyStorage(StorageProtocol):
     _initialized: bool = False
 
     def __new__(cls, *args, **kwargs) -> SQLAlchemyStorage:
-        database_url = kwargs.get("database_url") or (
-            args[2] if len(args) > 2 else "sqlite+aiosqlite:///messages.db"
+        db_credentials = kwargs.get("db_credentials") or (
+            args[1] if len(args) > 1 else {}
         )
-        if database_url not in cls._instances:
+        key = cls._build_database_url(db_credentials)
+        if key not in cls._instances:
             instance = super(SQLAlchemyStorage, cls).__new__(cls)
-            cls._instances[database_url] = instance
-        return cls._instances[database_url]
+            cls._instances[key] = instance
+        return cls._instances[key]
 
     def __init__(
         self,
-        queue: asyncio.Queue,
+        profile: ProfileInfo,
+        queue: Optional[asyncio.Queue] = None,
+        db_credentials: Optional[dict] = None,
         log: Optional[Union[Logger, LoggerAdapter]] = None,
-        database_url: str = "sqlite+aiosqlite:///messages.db",
         batch_size: int = 50,
         flush_interval: float = 2.0,
         echo: bool = False,
@@ -69,17 +71,18 @@ class SQLAlchemyStorage(StorageProtocol):
         Initialize SQLAlchemy storage.
 
         Args:
-            queue: Async queue for message batching
+            queue: Async queue for message batching (created automatically if None)
+            db_credentials: DB credential dict 
+                (storage_type, username, password, host, port, database_name, database_path)
             log: Logger instance
-            database_url: SQLAlchemy database URL
             batch_size: Max messages before auto-flush
             flush_interval: Seconds before auto-flush even if batch not full
             echo: Enable SQL query logging (for debugging)
         """
-        self.queue = queue
+        self.profile = profile
+        self.queue: asyncio.Queue = queue if queue is not None else asyncio.Queue()
         self.log = log or w_logger
-
-        self.database_url = database_url
+        self.db_credentials: dict = db_credentials or {}
         self._initialized = True
         self.batch_size = batch_size
         self.flush_interval = flush_interval
@@ -89,12 +92,58 @@ class SQLAlchemyStorage(StorageProtocol):
         self._session_factory: Optional[async_sessionmaker[AsyncSession]] = None
         self._writer_task: Optional[asyncio.Task] = None
         self._running = False
+        self._initialized_ = False
+
+    @staticmethod
+    def _build_database_url(db_credentials: dict) -> str:
+        """
+        Build SQLAlchemy-compatible URL from db_credentials dict.
+
+        Uses sqlalchemy.engine.URL.create() for safe dialect construction.
+        Falls back to SQLite default if storage_type is missing or sqlite.
+        """
+        from sqlalchemy.engine import URL
+
+        storage_type = db_credentials.get("storage_type") or "sqlite"
+        storage_type = storage_type.lower().replace("storagetype.", "")
+
+        if storage_type == "sqlite":
+            db_path = db_credentials.get("database_path")
+            # str(None) from from_profile becomes "None" — treat as missing
+            if not db_path or db_path == "None":
+                from camouchat_browser import DirectoryManager
+
+                platform = db_credentials.get("platform")
+                profile_id = db_credentials.get("profile_id")
+                if platform and profile_id:
+                    db_path = str(
+                        DirectoryManager().get_database_path(platform, profile_id)
+                    )
+                else:
+                    db_path = "messages.db"
+            return f"sqlite+aiosqlite:///{db_path}"
+
+        driver_map = {
+            "postgresql": "postgresql+asyncpg",
+            "mysql": "mysql+aiomysql",
+        }
+        dialect = driver_map.get(storage_type, f"{storage_type}+asyncpg")
+
+        url = URL.create(
+            drivername=dialect,
+            username=db_credentials.get("username"),
+            password=db_credentials.get("password"),
+            host=db_credentials.get("host", "localhost"),
+            port=db_credentials.get("port"),
+            database=db_credentials.get("database_name"),
+        )
+        return str(url)
 
     @classmethod
     def from_profile(
         cls,
         profile: ProfileInfo,
-        queue: asyncio.Queue,
+        queue: Optional[asyncio.Queue] = None,
         log: Optional[Union[Logger, LoggerAdapter]] = None,
         batch_size: int = 50,
         flush_interval: float = 2.0,
@@ -104,7 +153,7 @@ class SQLAlchemyStorage(StorageProtocol):
 
         Args:
             profile: ProfileInfo from ProfileManager
-            queue: Async queue
+            queue: Optional async queue (auto-created if None)
             log: Logger
             batch_size: Batch size
             flush_interval: Flush interval
@@ -112,11 +161,27 @@ class SQLAlchemyStorage(StorageProtocol):
         Returns:
             Configured SQLAlchemyStorage instance
         """
-        database_url = profile.database_url
+        db_credentials = {
+            "storage_type": profile.db_type,
+            "database_path": str(
+                DirectoryManager().get_database_path(
+                    profile.platform, profile.profile_id
+                )
+            ),
+            "platform": profile.platform,
+            "profile_id": profile.profile_id,
+            "username": profile.username,
+            "password": profile.password,
+            "host": profile.host,
+            "port": profile.port,
+            "database_name": profile.database_name,
+        }
+
         return cls(
+            profile=profile,
             queue=queue,
             log=log or w_logger,
-            database_url=database_url,
+            db_credentials=db_credentials,
             batch_size=batch_size,
             flush_interval=flush_interval,
         )
@@ -124,11 +189,9 @@ class SQLAlchemyStorage(StorageProtocol):
     async def init_db(self, **kwargs) -> None:
         """Initialize SQLAlchemy engine and session factory."""
         try:
-            is_sqlite = self.database_url.startswith("sqlite")
-            engine_kwargs: dict = {
-                "echo": self.echo,
-                "pool_pre_ping": True,
-            }
+            database_url = self._build_database_url(self.db_credentials)
+            is_sqlite = database_url.startswith("sqlite")
+            engine_kwargs: dict = {"echo": self.echo}
             if not is_sqlite:
                 engine_kwargs.update(
                     {
@@ -139,14 +202,14 @@ class SQLAlchemyStorage(StorageProtocol):
                     }
                 )
 
-            self._engine = create_async_engine(self.database_url, **engine_kwargs)
+            self._engine = create_async_engine(database_url, **engine_kwargs)
 
             # Create session factory
             self._session_factory = async_sessionmaker(
                 self._engine, class_=AsyncSession, expire_on_commit=False
             )
 
-            self.log.info(f"SQLAlchemy engine initialized: {self.database_url}")
+            self.log.info(f"SQLAlchemy engine initialized: {database_url}")
         except Exception as e:
             raise WhatsAppStorageError(f"Failed to initialize database: {e}") from e
 
@@ -561,10 +624,14 @@ class SQLAlchemyStorage(StorageProtocol):
 
     async def start(self, **kwargs) -> None:
         """Start database and background writer."""
-        await self.init_db()
-        await self.create_table()
-        await self._migrate_add_encryption_columns()
-        await self.start_writer()
+        if self._initialized_:
+            return
+        else:
+            self._initialized_ = True
+            await self.init_db()
+            await self.create_table()
+            await self._migrate_add_encryption_columns()
+            await self.start_writer()
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -575,3 +642,7 @@ class SQLAlchemyStorage(StorageProtocol):
         """Async context manager exit."""
         await self.close_db()
         return False
+
+    async def get_profile_info(self) -> ProfileInfo:
+        """Return the profile info used to initialize the storage."""
+        return self.profile
