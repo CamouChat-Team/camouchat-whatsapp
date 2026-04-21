@@ -8,7 +8,7 @@ High-stealth WhatsApp automation plugin for the CamouChat ecosystem. Built on to
 
 <p align="center">
   <a href="https://pypi.org/project/camouchat-whatsapp/">
-      <img src="https://img.shields.io/pypi/v/camouchat-whatsapp?label=camouchat-whatsapp&color=green" />
+      <img src="https://img.shields.io/badge/PyPI-camouchat--whatsapp-green" alt="PyPI" />
   </a>
   <a href="https://pepy.tech/projects/camouchat-whatsapp">
       <img src="https://static.pepy.tech/personalized-badge/camouchat-whatsapp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="PyPI Downloads" />
