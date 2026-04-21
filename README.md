@@ -6,6 +6,18 @@
 
 High-stealth WhatsApp automation plugin for the CamouChat ecosystem. Built on top of `camouchat-browser` and `WA-JS`, providing a structured, API-driven pipeline for multi-account automation with end-to-end encrypted message storage.
 
+<p align="center">
+  <a href="https://pypi.org/project/camouchat-whatsapp/">
+      <img src="https://img.shields.io/pypi/v/camouchat-whatsapp?label=camouchat-whatsapp&color=green" />
+  </a>
+  <a href="https://pepy.tech/projects/camouchat-whatsapp">
+      <img src="https://static.pepy.tech/personalized-badge/camouchat-whatsapp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="PyPI Downloads" />
+  </a>
+  <a href="https://opensource.org/licenses/MIT">
+      <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+  </a>
+</p>
+
 > [!WARNING]
 > This package requires a **one-time binary fetch** for the underlying Camoufox browser engine after installation. See [Setup](#setup) below.
 
