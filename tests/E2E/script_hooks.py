@@ -1,8 +1,9 @@
-from camouchat_core import MessageProtocol
-from camouchat_browser import CamoufoxBrowser, ProfileManager, BrowserConfig
-from camouchat_whatsapp import Login, WapiSession, on_newMsg, RegistryConfig
-from camouchat_core import Platform
 import asyncio
+
+from camouchat_browser import BrowserConfig, CamoufoxBrowser, ProfileManager
+from camouchat_core import MessageProtocol, Platform
+
+from camouchat_whatsapp import Login, RegistryConfig, WapiSession, on_newMsg
 
 pm = ProfileManager()
 config = BrowserConfig.from_dict(

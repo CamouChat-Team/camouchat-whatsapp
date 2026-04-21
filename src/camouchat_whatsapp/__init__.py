@@ -23,7 +23,7 @@ from .api import (
 from .core import Login, WebSelectorConfig
 
 # Utils
-from .decorator import on_newMsg, RegistryConfig
+from .decorator import RegistryConfig, on_newMsg
 from .features import FileTyped, InteractionController, MediaController, MediaType
 from .filters import MessageFilter
 

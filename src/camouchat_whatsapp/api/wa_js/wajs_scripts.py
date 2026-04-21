@@ -387,9 +387,7 @@ class WAJS_Scripts:
     # ─────────────────────────────────────────────
 
     @classmethod
-    def send_text_message(
-        cls, chat_id: str, message: str, options: dict | None = None
-    ) -> str:
+    def send_text_message(cls, chat_id: str, message: str, options: dict | None = None) -> str:
         """
         Pure api text send — no UI interaction required.
 
@@ -1297,9 +1295,7 @@ class WAJS_Scripts:
         return f"wpp.chat.markIsComposing('{chat_id}', {duration_ms}).then(() => true)"
 
     @classmethod
-    def decrypt_media(
-        cls, direct_path: str, media_key_b64: str, media_type: str
-    ) -> str:
+    def decrypt_media(cls, direct_path: str, media_key_b64: str, media_type: str) -> str:
         """
         Tier 1 Cache extraction. Legacy/Redundant now that we use downloadMedia,
         but kept for API compatibility. Returns null to force Tier 2/3 fallback.

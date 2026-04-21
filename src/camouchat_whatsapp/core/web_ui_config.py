@@ -4,25 +4,23 @@ Helper functions to interact with various WhatsApp Web UI components using Playw
 Conventions:
 - `page`: refers to `playwright.sync_api.Page` instance.
 - All other elements returned are of the type `Locator`.
-- Utility functions are written to extract attributes or recognize content like images, videos, or quoted messages.
+- Utility functions extract attributes or recognize content like
+  images, videos, or quoted messages.
 """
 
 import re
 from logging import Logger, LoggerAdapter
-from typing import Union, Optional
-
-from playwright.async_api import ElementHandle, Locator, Page
 
 from camouchat_core import UiConfigProtocol
+from playwright.async_api import ElementHandle, Locator, Page
+
 from camouchat_whatsapp.logger import w_logger
 
 
 class WebSelectorConfig(UiConfigProtocol):
     """Generic Custom Class , Different from every Platform"""
 
-    def __init__(
-        self, page: Page, log: Optional[Union[Logger, LoggerAdapter]] = None
-    ) -> None:
+    def __init__(self, page: Page, log: Logger | LoggerAdapter | None = None) -> None:
         self.page = page
         self.log = log or w_logger
         if self.page is None:
@@ -43,9 +41,7 @@ class WebSelectorConfig(UiConfigProtocol):
 
     def searchBox_chatList_panel(self) -> Locator:
         """Returns the search box on the chat list panel"""
-        return self.page.get_by_role(
-            "textbox", name=re.compile("search input textbox", re.I)
-        ).first
+        return self.page.get_by_role("textbox", name=re.compile("search input textbox", re.I)).first
 
     def message_box(self) -> Locator:
         """Message Input box on the message panel"""
@@ -77,7 +73,7 @@ class WebSelectorConfig(UiConfigProtocol):
         attr = await element.get_attribute("aria-rowcount")
         return int(attr) if attr else 0
 
-    def chat_items(self) -> Optional[Locator]:
+    def chat_items(self) -> Locator | None:
         """Returns a locator for all individual chat items (buttons) in the list."""
         row_locator = self.chat_list().get_by_role("row")
         list_locator = self.chat_list().get_by_role("listitem")
@@ -88,7 +84,7 @@ class WebSelectorConfig(UiConfigProtocol):
         return None
 
     @staticmethod
-    async def getChat_low_Quality_Img(chat: Union[ElementHandle, Locator]) -> str:
+    async def getChat_low_Quality_Img(chat: ElementHandle | Locator) -> str:
         """Extracts the low-quality image (thumbnail) from a chat preview item."""
         if isinstance(chat, Locator):
             chat = await chat.element_handle(timeout=1001)
@@ -104,7 +100,7 @@ class WebSelectorConfig(UiConfigProtocol):
         return ""
 
     @staticmethod
-    async def getChatName(chat: Union[ElementHandle, Locator]) -> str:
+    async def getChatName(chat: ElementHandle | Locator) -> str:
         """Returns the primary chat name (first span[title]) or empty string."""
         if isinstance(chat, Locator):
             chat = await chat.element_handle(timeout=1001)
@@ -123,7 +119,7 @@ class WebSelectorConfig(UiConfigProtocol):
         return ""
 
     @staticmethod
-    async def is_community(chat: Union[ElementHandle, Locator]) -> bool:
+    async def is_community(chat: ElementHandle | Locator) -> bool:
         """
         If this chat item has the 'default-community-refreshed' icon,
         return True.
@@ -133,12 +129,8 @@ class WebSelectorConfig(UiConfigProtocol):
             if chat is None:
                 return False
 
-        icon = await chat.query_selector(
-            "span[data-icon='default-community-refreshed']"
-        )
-        if icon and await icon.is_visible():
-            return True
-        return False
+        icon = await chat.query_selector("span[data-icon='default-community-refreshed']")
+        return bool(icon and await icon.is_visible())
 
     def Profile_header(self) -> Locator:
         """
@@ -155,9 +147,7 @@ class WebSelectorConfig(UiConfigProtocol):
 
     def link_phone_number_button(self) -> Locator:
         """Returns the locator for 'Link with phone number' button."""
-        return self.page.get_by_role(
-            "button", name=re.compile(r"log.*in.*phone number", re.I)
-        )
+        return self.page.get_by_role("button", name=re.compile(r"log.*in.*phone number", re.I))
 
     def country_selector_button(self) -> Locator:
         """Returns the locator for country selection dropdown (chevron icon)."""
@@ -208,9 +198,7 @@ class WebSelectorConfig(UiConfigProtocol):
         Returns a locator for all messages in the current open chat.
         Each message element has a unique `data-id` and role "row".
         """
-        return self.page.locator(
-            'div[role="row"] div[data-id], div[data-id]:has(.copyable-text)'
-        )
+        return self.page.locator('div[role="row"] div[data-id], div[data-id]:has(.copyable-text)')
 
     async def messages_incoming(self) -> Locator:
         """filters for the personal | group chat incoming messages"""
@@ -221,16 +209,14 @@ class WebSelectorConfig(UiConfigProtocol):
         return self.page.locator('[role="row"] div[data-id] .message-out')
 
     @staticmethod
-    async def get_message_text(message_element: Union[ElementHandle, Locator]) -> str:
+    async def get_message_text(message_element: ElementHandle | Locator) -> str:
         """Returns the text content of a message if visible."""
         if isinstance(message_element, Locator):
             message_element = await message_element.element_handle()
             if message_element is None:
                 return ""
 
-        span = await message_element.query_selector(
-            "span[data-testid='selectable-text']"
-        )
+        span = await message_element.query_selector("span[data-testid='selectable-text']")
         if not span:
             # Fallback to inner_text directly if span not found
             return await message_element.inner_text() or ""
@@ -241,9 +227,9 @@ class WebSelectorConfig(UiConfigProtocol):
         return ""
 
     @staticmethod
-    async def is_message_out(message: Union[ElementHandle, Locator]) -> bool:
+    async def is_message_out(message: ElementHandle | Locator) -> bool:
         """Returns True if the message is outgoing (sent by bot)."""
-        element: Union[ElementHandle, Locator, None]
+        element: ElementHandle | Locator | None
         if isinstance(message, ElementHandle):
             element = await message.query_selector(".message-out")
         else:
@@ -254,7 +240,7 @@ class WebSelectorConfig(UiConfigProtocol):
         return element is not None and await element.is_visible()
 
     @staticmethod
-    async def get_dataID(message: Union[ElementHandle, Locator]) -> str:
+    async def get_dataID(message: ElementHandle | Locator) -> str:
         """Returns the unique data-id attribute of a message."""
         ID = await message.get_attribute("data-id")
         return ID or ""
@@ -262,7 +248,8 @@ class WebSelectorConfig(UiConfigProtocol):
     # -------------------- Media Send  -------------------- #
     def plus_rounded_icon(self) -> Locator:
         """
-        It is a locator for the plus icon in the message box for opening menu with options like : image , videos ,documents to send
+        Locator for the plus icon to open the attachment menu
+        (images, videos, documents, etc).
         """
         return (
             self.page.get_by_role("button")
@@ -309,7 +296,7 @@ class WebSelectorConfig(UiConfigProtocol):
         return ""
 
     @staticmethod
-    async def isReacted(message: Union[ElementHandle, Locator]) -> bool:
+    async def isReacted(message: ElementHandle | Locator) -> bool:
         """Check if the message is reacted or not"""
         try:
             if isinstance(message, Locator):
@@ -324,9 +311,7 @@ class WebSelectorConfig(UiConfigProtocol):
         pic = self.page.get_by_role("button", name=re.compile("open picture", re.I))
         if pic and await pic.is_visible():
             return True
-        pic2 = await message.query_selector(
-            "xpath=.//img[contains(@src,'data:image/')]"
-        )
+        pic2 = await message.query_selector("xpath=.//img[contains(@src,'data:image/')]")
         return await pic2.is_visible() if pic2 else False
 
     @staticmethod
@@ -344,7 +329,8 @@ class WebSelectorConfig(UiConfigProtocol):
     @staticmethod
     async def is_Voice_Message(message: ElementHandle) -> bool:
         voice = await message.query_selector(
-            "xpath=.//button[contains(translate(@aria-label,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'voice message')]"
+            "xpath=.//button[contains(translate(@aria-label,"
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'voice message')]"
         )
         if voice and await voice.is_visible():
             return True
@@ -356,8 +342,8 @@ class WebSelectorConfig(UiConfigProtocol):
     @staticmethod
     async def is_gif(message: ElementHandle) -> bool:
         gif_btn = await message.query_selector(
-            "xpath=.//div[@role='button' and "
-            "contains(translate(@aria-label,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'play gif')]"
+            "xpath=.//div[@role='button' and contains(translate(@aria-label,"
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'play gif')]"
         )
         if gif_btn and await gif_btn.is_visible():
             return True
@@ -369,14 +355,16 @@ class WebSelectorConfig(UiConfigProtocol):
     @staticmethod
     async def is_animated_sticker(message: ElementHandle) -> bool:
         sticker = await message.query_selector(
-            "xpath=.//img[contains(translate(@alt,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'animated sticker')]"
+            "xpath=.//img[contains(translate(@alt,"
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'animated sticker')]"
         )
         return await sticker.is_visible() if sticker else False
 
     @staticmethod
     async def is_plain_sticker(message: ElementHandle) -> bool:
         sticker = await message.query_selector(
-            "xpath=.//img[contains(translate(@alt,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'sticker with no label')]"
+            "xpath=.//img[contains(translate(@alt,"
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'sticker with no label')]"
         )
         return await sticker.is_visible() if sticker else False
 
@@ -398,7 +386,7 @@ class WebSelectorConfig(UiConfigProtocol):
 
     # -------------------- Quoted Message Utilities -------------------- #
     @staticmethod
-    async def isQuotedText(message: ElementHandle) -> Optional[ElementHandle]:
+    async def isQuotedText(message: ElementHandle) -> ElementHandle | None:
         """
         Checks if a message is quoting another and returns the quoted-message handle.
         """
@@ -425,9 +413,7 @@ class WebSelectorConfig(UiConfigProtocol):
         "Your chats and calls are private"
         """
         page = self.page
-        button = await page.query_selector(
-            "div[data-animate-model-popup] button:text-is('OK')"
-        )
+        button = await page.query_selector("div[data-animate-model-popup] button:text-is('OK')")
         if button:
             try:
                 if await button.is_visible():
@@ -448,52 +434,32 @@ class WebSelectorConfig(UiConfigProtocol):
     --Exit group
     """
 
-    async def group_info(self) -> Optional[ElementHandle]:
+    async def group_info(self) -> ElementHandle | None:
+        dialog = await self.page.query_selector("div[role='dialog']")
+        return await dialog.query_selector("li:has-text('group info')") if dialog else None
+
+    async def select_messages(self) -> ElementHandle | None:
+        dialog = await self.page.query_selector("div[role='dialog']")
+        return await dialog.query_selector("li:has-text('select messages')") if dialog else None
+
+    async def mute_notifications(self) -> ElementHandle | None:
+        dialog = await self.page.query_selector("div[role='dialog']")
+        return await dialog.query_selector("li:has-text('mute notifications')") if dialog else None
+
+    async def disappearing_messages(self) -> ElementHandle | None:
         dialog = await self.page.query_selector("div[role='dialog']")
         return (
-            await dialog.query_selector("li:has-text('group info')") if dialog else None
+            await dialog.query_selector("li:has-text('disappearing messages')") if dialog else None
         )
 
-    async def select_messages(self) -> Optional[ElementHandle]:
+    async def add_to_fav(self) -> ElementHandle | None:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return (
-            await dialog.query_selector("li:has-text('select messages')")
-            if dialog
-            else None
-        )
+        return await dialog.query_selector("li:has-text('add to favourites')") if dialog else None
 
-    async def mute_notifications(self) -> Optional[ElementHandle]:
+    async def close_chat(self) -> ElementHandle | None:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return (
-            await dialog.query_selector("li:has-text('mute notifications')")
-            if dialog
-            else None
-        )
+        return await dialog.query_selector("li:has-text('close chat')") if dialog else None
 
-    async def disappearing_messages(self) -> Optional[ElementHandle]:
+    async def clear_chat(self) -> ElementHandle | None:
         dialog = await self.page.query_selector("div[role='dialog']")
-        return (
-            await dialog.query_selector("li:has-text('disappearing messages')")
-            if dialog
-            else None
-        )
-
-    async def add_to_fav(self) -> Optional[ElementHandle]:
-        dialog = await self.page.query_selector("div[role='dialog']")
-        return (
-            await dialog.query_selector("li:has-text('add to favourites')")
-            if dialog
-            else None
-        )
-
-    async def close_chat(self) -> Optional[ElementHandle]:
-        dialog = await self.page.query_selector("div[role='dialog']")
-        return (
-            await dialog.query_selector("li:has-text('close chat')") if dialog else None
-        )
-
-    async def clear_chat(self) -> Optional[ElementHandle]:
-        dialog = await self.page.query_selector("div[role='dialog']")
-        return (
-            await dialog.query_selector("li:has-text('clear chat')") if dialog else None
-        )
+        return await dialog.query_selector("li:has-text('clear chat')") if dialog else None

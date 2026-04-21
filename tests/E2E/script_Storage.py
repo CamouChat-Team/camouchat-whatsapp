@@ -7,6 +7,7 @@ from camouchat_browser import (
     ProfileManager,
 )
 from camouchat_core import Platform
+
 from camouchat_whatsapp import (
     Login,
     MessageModelAPI,
@@ -51,11 +52,8 @@ async def main():
     await new_msg()
 
     try:
-        print(
-            "\n>>> Listening for messages... Press Ctrl+C to stop and view data from DB."
-        )
-        while True:
-            await asyncio.sleep(1)
+        print("\n>>> Listening for messages... Press Ctrl+C to stop and view data from DB.")
+        await asyncio.Event().wait()
     except asyncio.CancelledError:
         pass
     finally:
@@ -71,10 +69,7 @@ async def main():
 
         for msg in db_msgs:
             body = msg.get("body") or ""
-            if len(body) > 100:
-                body_disp = f"{body[:40]}...[truncated {len(body)} chars]"
-            else:
-                body_disp = body
+            body_disp = f"{body[:40]}...[truncated {len(body)} chars]" if len(body) > 100 else body
 
             print("\n--- Found DB Record ---")
             print(f"ID     : {msg.get('id_serialized')}")

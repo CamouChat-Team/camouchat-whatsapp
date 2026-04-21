@@ -4,19 +4,21 @@ Tests cover QR login, Code-based login, and session management.
 """
 
 import logging
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from playwright.async_api import (
-    Page,
-    Locator,
-    TimeoutError as PlaywrightTimeoutError,
     BrowserContext,
+    Locator,
+    Page,
+)
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
 )
 
-from camouchat_whatsapp.exceptions import LoginError
 from camouchat_whatsapp.core.login import Login
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.exceptions import LoginError
 
 # ============================================================================
 # FIXTURES

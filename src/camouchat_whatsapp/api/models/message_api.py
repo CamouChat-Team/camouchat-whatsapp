@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
-from playwright.async_api import ElementHandle, Locator
+from typing import Any
+
 from camouchat_core import MessageProtocol
+from playwright.async_api import ElementHandle, Locator
 
 
 @dataclass
@@ -41,8 +42,8 @@ class MessageModelAPI(MessageProtocol):
 
         # ── Disappearing / ephemeral ──────────────────────────────────────────
         ephemeralDuration (int | None): Disappearing message duration in seconds (0 if off).
-        disappearingModeInitiator (str | None): Who triggered disappearing mode ('chat', 'admin', etc.).
-        disappearingModeTrigger (str | None): What triggered it ('chat_settings', 'admin', etc.).
+        disappearingModeInitiator (str | None): Who triggered disappearing mode ('chat', 'admin', etc).
+        disappearingModeTrigger (str | None): What triggered it ('chat_settings', 'admin', etc).
 
         # ── Special message type flags ────────────────────────────────────────
         isAvatar (bool | None): True if message is an avatar sticker.
@@ -105,107 +106,107 @@ class MessageModelAPI(MessageProtocol):
     """
 
     # ── Identity ──────────────────────────────────────────────────────────────
-    id_serialized: Optional[str]
-    encryption_nonce: Optional[str]
-    timestamp: Optional[int]
-    msgtype: Optional[str]
-    body: Optional[str]
+    id_serialized: str | None
+    encryption_nonce: str | None
+    timestamp: int | None
+    msgtype: str | None
+    body: str | None
     from_chat: str
-    rowId: Optional[int]
-    fromMe: Optional[bool]
-    jid_From: Optional[str]
-    jid_To: Optional[str]
-    author: Optional[str]
-    pushname: Optional[str]
-    broadcast: Optional[bool]
-    caption: Optional[str]
-    ack: Optional[int]
+    rowId: int | None
+    fromMe: bool | None
+    jid_From: str | None
+    jid_To: str | None
+    author: str | None
+    pushname: str | None
+    broadcast: bool | None
+    caption: str | None
+    ack: int | None
 
     # ── Presence / arrival flags ──────────────────────────────────────────────
-    isNewMsg: Optional[bool]
-    recvFresh: Optional[bool]
-    isMdHistoryMsg: Optional[bool]
+    isNewMsg: bool | None
+    recvFresh: bool | None
+    isMdHistoryMsg: bool | None
 
     # ── Social flags ──────────────────────────────────────────────────────────
-    isStarMsg: Optional[bool]
-    isForwarded: Optional[bool]
-    forwardsCount: Optional[int]
-    hasReaction: Optional[bool]
-    pendingDeleteForMe: Optional[bool]
+    isStarMsg: bool | None
+    isForwarded: bool | None
+    forwardsCount: int | None
+    hasReaction: bool | None
+    pendingDeleteForMe: bool | None
 
     # ── Disappearing / ephemeral ──────────────────────────────────────────────
-    ephemeralDuration: Optional[int]
-    disappearingModeInitiator: Optional[str]
-    disappearingModeTrigger: Optional[str]
+    ephemeralDuration: int | None
+    disappearingModeInitiator: str | None
+    disappearingModeTrigger: str | None
 
     # ── Special message type flags ────────────────────────────────────────────
-    isAvatar: Optional[bool]
-    isVideoCallMessage: Optional[bool]
-    isDynamicReplyButtonsMsg: Optional[bool]
-    isCarouselCard: Optional[bool]
-    activeBotMsgStreamingInProgress: Optional[bool]
+    isAvatar: bool | None
+    isVideoCallMessage: bool | None
+    isDynamicReplyButtonsMsg: bool | None
+    isCarouselCard: bool | None
+    activeBotMsgStreamingInProgress: bool | None
 
     # ── Quoted / reply fields ─────────────────────────────────────────────────
-    fromQuotedMsg: Optional[bool]
-    isQuotedMsgAvailable: Optional[bool]
-    quotedMsgId: Optional[str]
-    quotedmsgtype: Optional[str]
-    quotedMsgBody: Optional[str]
-    quotedParticipant: Optional[str]
-    quotedRemoteJid: Optional[str]
+    fromQuotedMsg: bool | None
+    isQuotedMsgAvailable: bool | None
+    quotedMsgId: str | None
+    quotedmsgtype: str | None
+    quotedMsgBody: str | None
+    quotedParticipant: str | None
+    quotedRemoteJid: str | None
 
     # ── Mentions ──────────────────────────────────────────────────────────────
-    mentionedJidList: Optional[List[str]]
+    mentionedJidList: list[str] | None
 
     # ── Sender Data (Deep Identity) ───────────────────────────────────────────
-    senderObj: Optional[Dict[str, Any]]
-    senderWithDevice: Optional[str]
+    senderObj: dict[str, Any] | None
+    senderWithDevice: str | None
 
     # ── Diagnostics/Debug ───────────────────────────────────────────────────────────
-    optionalAttrList: Optional[Dict[str, str]]
+    optionalAttrList: dict[str, str] | None
 
     # ── Media fields ──────────────────────────────────────────────────────
-    mimetype: Optional[str]
-    directPath: Optional[str]
-    mediaKey: Optional[str]
-    size: Optional[int]
-    duration: Optional[int]
-    isViewOnce: Optional[bool]
-    mediaData: Optional[Dict[str, Any]]
-    deprecatedMms3Url: Optional[str]
-    staticUrl: Optional[str]
-    thumbnailDirectPath: Optional[str]
-    thumbnailSha256: Optional[str]
-    thumbnailEncSha256: Optional[str]
+    mimetype: str | None
+    directPath: str | None
+    mediaKey: str | None
+    size: int | None
+    duration: int | None
+    isViewOnce: bool | None
+    mediaData: dict[str, Any] | None
+    deprecatedMms3Url: str | None
+    staticUrl: str | None
+    thumbnailDirectPath: str | None
+    thumbnailSha256: str | None
+    thumbnailEncSha256: str | None
 
     # ── Poll fields ───────────────────────────────────────────────────────────
-    isQuestion: Optional[bool]
-    pollName: Optional[str]
-    pollType: Optional[str]
-    pollContentType: Optional[str]
-    pollSelectableOptionsCount: Optional[int]
-    questionResponsesCount: Optional[int]
-    readQuestionResponsesCount: Optional[int]
+    isQuestion: bool | None
+    pollName: str | None
+    pollType: str | None
+    pollContentType: str | None
+    pollSelectableOptionsCount: int | None
+    questionResponsesCount: int | None
+    readQuestionResponsesCount: int | None
 
     # ── Event fields ──────────────────────────────────────────────────────────
-    eventName: Optional[str]
-    eventDescription: Optional[str]
-    eventJoinLink: Optional[str]
-    eventStartTime: Optional[int]
-    eventEndTime: Optional[int]
-    isEventCanceled: Optional[bool]
-    eventIsScheduledCall: Optional[bool]
+    eventName: str | None
+    eventDescription: str | None
+    eventJoinLink: str | None
+    eventStartTime: int | None
+    eventEndTime: int | None
+    isEventCanceled: bool | None
+    eventIsScheduledCall: bool | None
 
     # ── vCard fields ──────────────────────────────────────────────────────────
-    vcardFormattedName: Optional[str]
-    vcardList: Optional[List[Any]]
+    vcardFormattedName: str | None
+    vcardList: list[Any] | None
 
     # ── Misc ──────────────────────────────────────────────────────────────────
-    stickerSentTs: Optional[int]
-    isViewed: Optional[bool]
+    stickerSentTs: int | None
+    isViewed: bool | None
 
     # ─────────────────────────────────────────────────────────────────────────
-    ui: Optional[Union[ElementHandle, Locator]] = None  # type: ignore[assignment]
+    ui: ElementHandle | Locator | None = None  # type: ignore[assignment]
     _MEDIA_THUMB_TYPES: frozenset = frozenset(
         {
             "image",
@@ -221,7 +222,7 @@ class MessageModelAPI(MessageProtocol):
     )
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MessageModelAPI":
+    def from_dict(cls, data: dict[str, Any]) -> "MessageModelAPI":
         """
         Build MessageModelAPI from the raw dict returned by WAJS_Scripts.get_message_by_id().
 
@@ -296,9 +297,7 @@ class MessageModelAPI(MessageProtocol):
             isStarMsg=g("star"),
             isForwarded=g("isForwarded"),
             forwardsCount=(
-                g("forwardingScore")
-                if g("forwardingScore") is not None
-                else g("forwardsCount", 0)
+                g("forwardingScore") if g("forwardingScore") is not None else g("forwardsCount", 0)
             ),
             hasReaction=g("hasReaction"),
             pendingDeleteForMe=g("pendingDeleteForMe"),
@@ -313,9 +312,7 @@ class MessageModelAPI(MessageProtocol):
             isCarouselCard=g("isCarouselCard"),
             activeBotMsgStreamingInProgress=g("activeBotMsgStreamingInProgress"),
             # ── Quoted / reply ─────────────────────────────────────────────────
-            fromQuotedMsg=bool(
-                g("quotedMsg") or g("quotedMsgId") or g("quotedStanzaID")
-            ),
+            fromQuotedMsg=bool(g("quotedMsg") or g("quotedMsgId") or g("quotedStanzaID")),
             isQuotedMsgAvailable=bool(g("quotedMsg")),
             quotedMsgId=g("quotedMsgId") or g("quotedStanzaID"),
             quotedmsgtype=g("quotedmsgtype"),
@@ -324,10 +321,7 @@ class MessageModelAPI(MessageProtocol):
             quotedRemoteJid=g("quotedRemoteJid"),
             # ── Mentions ───────────────────────────────────────────────────────
             mentionedJidList=(
-                [
-                    j if isinstance(j, str) else j.get("_serialized", str(j))
-                    for j in m_list
-                ]
+                [j if isinstance(j, str) else j.get("_serialized", str(j)) for j in m_list]
                 if (m_list := g("mentionedJidList"))
                 else None
             ),
@@ -420,9 +414,7 @@ class MessageModelAPI(MessageProtocol):
             lines.append(f"  senderDevice: {self.senderWithDevice}")
 
         lines.append(f"  timestamp   : {self.timestamp}")
-        lines.append(
-            f"  ack         : {self.ack}  (0=pending 1=sent 2=delivered 3=read 4=played)"
-        )
+        lines.append(f"  ack         : {self.ack}  (0=pending 1=sent 2=delivered 3=read 4=played)")
 
         # ── Body / caption ────────────────────────────────────────────────────
         if self.body:
@@ -518,7 +510,7 @@ class MessageModelAPI(MessageProtocol):
                 lines.append(f"                {', '.join(mentions)}")
             else:
                 lines.append(
-                    f"                {', '.join(mentions[:3])} (+{len(mentions)-3} more)"
+                    f"                {', '.join(mentions[:3])} (+{len(mentions) - 3} more)"
                 )
 
         # ── Media ─────────────────────────────────────────────────────────────
@@ -541,14 +533,10 @@ class MessageModelAPI(MessageProtocol):
             if self.pollName:
                 lines.append(f"  pollName    : {self.pollName}")
             if self.pollType:
-                lines.append(
-                    f"  pollType    : {self.pollType}  content={self.pollContentType}"
-                )
+                lines.append(f"  pollType    : {self.pollType}  content={self.pollContentType}")
             if self.pollSelectableOptionsCount is not None:
                 sel = self.pollSelectableOptionsCount
-                lines.append(
-                    f"  pollSelect  : {sel if sel else 'unlimited'} option(s) per voter"
-                )
+                lines.append(f"  pollSelect  : {sel if sel else 'unlimited'} option(s) per voter")
 
         # ── Event detail ──────────────────────────────────────────────────────
         if self.msgtype == "event_creation":
@@ -556,13 +544,9 @@ class MessageModelAPI(MessageProtocol):
                 lines.append(f"  eventName   : {self.eventName}")
             if self.eventDescription:
                 desc = self.eventDescription
-                lines.append(
-                    f"  eventDesc   : {desc[:80]}{'…' if len(desc) > 80 else ''}"
-                )
+                lines.append(f"  eventDesc   : {desc[:80]}{'…' if len(desc) > 80 else ''}")
             if self.eventStartTime:
-                lines.append(
-                    f"  eventTime   : {self.eventStartTime} → {self.eventEndTime}"
-                )
+                lines.append(f"  eventTime   : {self.eventStartTime} → {self.eventEndTime}")
             if self.eventJoinLink:
                 lines.append(f"  eventLink   : {self.eventJoinLink}")
             if self.isEventCanceled:
@@ -590,7 +574,7 @@ class MessageModelAPI(MessageProtocol):
             f")"
         )
 
-    def to_dict(self, include_none: bool = False) -> Dict[str, Any]:
+    def to_dict(self, include_none: bool = False) -> dict[str, Any]:
         """
         Export this MessageModelAPI as a flat Python dict.
 
@@ -609,7 +593,7 @@ class MessageModelAPI(MessageProtocol):
         Returns:
             Dict[str, Any] — all fields, grouped logically.
         """
-        raw: Dict[str, Any] = {
+        raw: dict[str, Any] = {
             # ── Identity ──────────────────────────────────────────────────────
             "id_serialized": self.id_serialized,
             "encryption_nonce": self.encryption_nonce,

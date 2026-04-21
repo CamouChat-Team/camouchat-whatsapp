@@ -1,7 +1,9 @@
 import asyncio
 import time
-from camouchat_core import Platform
+
 from camouchat_browser import ProfileManager
+from camouchat_core import Platform
+
 from camouchat_whatsapp import SQLAlchemyStorage
 
 

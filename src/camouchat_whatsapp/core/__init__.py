@@ -4,7 +4,7 @@ Contains Core-specific files like :
 - web_ui_config.py
 """
 
-from .web_ui_config import WebSelectorConfig
 from .login import Login
+from .web_ui_config import WebSelectorConfig
 
 __all__ = ["Login", "WebSelectorConfig"]

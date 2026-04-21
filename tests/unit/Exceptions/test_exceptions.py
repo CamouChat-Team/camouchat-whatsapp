@@ -1,10 +1,10 @@
+import pytest
+
 from camouchat_whatsapp.exceptions import (
-    ChatNotFoundError,
     ChatClickError,
+    ChatNotFoundError,
     MessageNotFoundError,
 )
-
-import pytest
 
 
 def test_chat_not_found_error():

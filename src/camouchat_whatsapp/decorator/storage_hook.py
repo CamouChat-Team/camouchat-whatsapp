@@ -2,18 +2,20 @@
 Introduces decorator based storage integration.
 """
 
-# Later after this we will introduce StorageType in the ProfileInfo , as that will help us give more data & flexibility.
+# Later after this we will introduce StorageType in the ProfileInfo,
+# as that will help us give more data & flexibility.
 
-from typing import Any
-from camouchat_core import MessageProtocol
-from typing import Coroutine
-from typing import Callable
 import asyncio
 import functools
 import inspect
+from collections.abc import Callable, Coroutine
+from typing import Any
+
 from camouchat_browser import ProfileInfo
-from camouchat_whatsapp.storage import SQLAlchemyStorage
+from camouchat_core import MessageProtocol
+
 from camouchat_whatsapp.logger import w_logger
+from camouchat_whatsapp.storage import SQLAlchemyStorage
 
 
 def on_storage(profile: ProfileInfo) -> Callable:
@@ -36,7 +38,8 @@ def on_storage(profile: ProfileInfo) -> Callable:
             if param.annotation == MessageProtocol:
                 msg_param_name = name
                 w_logger.debug(
-                    f"@on_storage: '{func.__name__}' — MessageProtocol annotated param '{name}' found."
+                    f"@on_storage: '{func.__name__}' — "
+                    f"MessageProtocol annotated param '{name}' found."
                 )
                 break
 
@@ -48,7 +51,8 @@ def on_storage(profile: ProfileInfo) -> Callable:
                 w_logger.warning(
                     f"@on_storage: '{func.__name__}' — no MessageProtocol annotation found. "
                     f"Using first param '{msg_param_name}' as message. "
-                    f"Tip: annotate it with 'msg: MessageProtocol' from camouchat_core for explicit resolution."
+                    f"Tip: annotate it with 'msg: MessageProtocol' from camouchat_core "
+                    f"for explicit resolution."
                 )
 
         if msg_param_name is None:
@@ -73,4 +77,8 @@ def on_storage(profile: ProfileInfo) -> Callable:
 
         return wrapper
 
+    def _get_storage() -> SQLAlchemyStorage:
+        return _ref
+
+    decorator.get_storage = _get_storage  # type: ignore
     return decorator

@@ -9,7 +9,8 @@ from camouchat_browser import (
     CamoufoxBrowser,
     ProfileManager,
 )
-from camouchat_core import Platform, FileTyped, MediaType
+from camouchat_core import FileTyped, MediaType, Platform
+
 from camouchat_whatsapp import Login, MediaController
 
 
@@ -66,7 +67,8 @@ async def main():
         print(chat)
         await wapi.chat_manager.open_chat(chat=chat)
         print(
-            f"----------------Chat Opened name = {chat.formattedTitle} , id = {chat.id_serialized} \n"
+            f"----------------Chat Opened name = {chat.formattedTitle} , "
+            f"id = {chat.id_serialized} \n"
         )
         success = False
 
@@ -76,7 +78,10 @@ async def main():
             # await replyObj.quote_only(message=msg)  # UI: Trigger the quote/reply bubble
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
-                text="**You have been Ponged!!!** \ud83c\udfd3\n_Reply from CamouChat Stealth Bridge_",
+                text=(
+                    "**You have been Ponged!!!** \ud83c\udfd3\n"
+                    "_Reply from CamouChat Stealth Bridge_"
+                ),
                 quoted_msg_id=msg.id_serialized,
             )
             success = True
@@ -104,13 +109,15 @@ async def main():
         elif msg.body == "!me":
             print("[*] Command triggered: !me (Identity Extraction)")
             # Tests identity and sender objects
-            sender_name = (
-                msg.author if chat.groupType != "DEFAULT" else chat.id_serialized
-            )
+            sender_name = msg.author if chat.groupType != "DEFAULT" else chat.id_serialized
             push_name = msg.pushname
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
-                text=f"\ud83d\udc64 *Identity Profile*\n\u2022 Sender_id: {sender_name}\n\u2022 PushName: {push_name}",
+                text=(
+                    f"\ud83d\udc64 *Identity Profile*\n"
+                    f"\u2022 Sender_id: {sender_name}\n"
+                    f"\u2022 PushName: {push_name}"
+                ),
                 quoted_msg_id=msg.id_serialized,
             )
             success = True
@@ -192,10 +199,8 @@ async def main():
     # Keep the script running to listen for events
     await new_msg()
 
-    print(
-        "\n[\u2714] Hook active. Try sending !ping, !info, !me, or !echo <text> in WhatsApp."
-    )
-    await asyncio.sleep(3600)  # 1 hour running.
+    print("\n[\u2714] Hook active. Try sending !ping, !info, !me, or !echo <text> in WhatsApp.")
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":

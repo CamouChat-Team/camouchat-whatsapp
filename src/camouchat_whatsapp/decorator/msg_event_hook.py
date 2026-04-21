@@ -27,28 +27,29 @@ Usage:
 
 import asyncio
 import functools
-from typing import Any, Callable, Coroutine, Optional
-from camouchat_whatsapp.api import WapiSession
-from .storage_hook import on_storage
-
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
+from typing import Any
+
 from camouchat_browser import ProfileInfo
+
+from camouchat_whatsapp.api import WapiSession
+
+from .storage_hook import on_storage
 
 
 @dataclass
 class RegistryConfig:
     """Configuration for on_newMsg decorator pipeline."""
 
-    profile: Optional[ProfileInfo] = None  # enables storage if set
+    profile: ProfileInfo | None = None  # enables storage if set
     encrypt: bool = False  # enables encryption if True
 
 
 def on_newMsg(
     wapi_session: WapiSession,
-    config: Optional[RegistryConfig] = None,
-) -> Callable[
-    [Callable[..., Coroutine[Any, Any, Any]]], Callable[..., Coroutine[Any, Any, Any]]
-]:
+    config: RegistryConfig | None = None,
+) -> Callable[[Callable[..., Coroutine[Any, Any, Any]]], Callable[..., Coroutine[Any, Any, Any]]]:
     """
     Decorator factory that hooks into WhatsApp's real-time message stream.
 
@@ -74,19 +75,16 @@ def on_newMsg(
     ) -> Callable[..., Coroutine[Any, Any, Any]]:
         if not asyncio.iscoroutinefunction(func):
             raise TypeError(
-                f"@on_newMsg: '{func.__name__}' must be an async function. "
-                f"Got: {type(func)}"
+                f"@on_newMsg: '{func.__name__}' must be an async function. Got: {type(func)}"
             )
 
         # Build the handler pipeline at decoration time
         # Each wrapper adds a capability layer around the user's function
         handler = func
 
-        if config is not None:
-            # Layer 1: storage — saves each incoming message before calling user func
-            if config.profile is not None:
-                storage_decorator = on_storage(config.profile)
-                handler = storage_decorator(handler)
+        if config is not None and config.profile is not None:
+            storage_decorator = on_storage(config.profile)
+            handler = storage_decorator(handler)
 
             # Layer 2: encryption (future)
             # if config.encrypt:

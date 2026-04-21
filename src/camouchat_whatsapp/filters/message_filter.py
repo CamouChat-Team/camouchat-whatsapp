@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from queue import Queue
-from typing import List, Optional, TypeVar, Sequence
+from typing import TypeVar
 
 from camouchat_core import ChatProtocol, MessageProtocol
 
@@ -18,8 +19,8 @@ T = TypeVar("T", bound=MessageProtocol)
 class State:
     """Chat State"""
 
-    defer_since: Optional[float]
-    last_seen: Optional[float]
+    defer_since: float | None
+    last_seen: float | None
     window_start: float = field(default_factory=time.time)
     count: int = 0
 
@@ -66,8 +67,8 @@ class MessageFilter:
 
     def apply(
         self,
-        msgs: List[T],
-    ) -> List[T]:
+        msgs: list[T],
+    ) -> list[T]:
         """
         Applies the filter on any set of Messages.
         filters is agnostic to message direction or type.
@@ -92,9 +93,7 @@ class MessageFilter:
         for m in msgs:
             mi: MessageProtocol = m
             if mi.from_chat != m0.from_chat:
-                raise MessageFilterError(
-                    "MessageFilter.apply expects messages from a single chat"
-                )
+                raise MessageFilterError("MessageFilter.apply expects messages from a single chat")
 
         chat = m0.from_chat
         chat_key = chat.id_serialized if not isinstance(chat, str) else chat

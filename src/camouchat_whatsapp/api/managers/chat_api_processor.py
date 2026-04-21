@@ -1,15 +1,15 @@
 import asyncio
 import json
 import random
-
+from collections.abc import Sequence
 from logging import Logger, LoggerAdapter
-from typing import Any, Sequence
+from typing import Any
 
+from camouchat_core import ChatProcessorProtocol, ChatProtocol
 from playwright.async_api import Page
 
-from camouchat_core import ChatProtocol, ChatProcessorProtocol
 from camouchat_whatsapp.api.models import ChatModelAPI
-from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
+from camouchat_whatsapp.api.wa_js import WAJS_Scripts, WapiWrapper
 from camouchat_whatsapp.logger import w_logger
 
 # todo , Add Auto logger later
@@ -110,9 +110,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
             # scroll into view + initial rect
             rect = await page.evaluate(_find_js)
             if rect is None:
-                self.log.debug(
-                    f"'{name}' not in #pane-side DOM (attempt {attempt + 1})"
-                )
+                self.log.debug(f"'{name}' not in #pane-side DOM (attempt {attempt + 1})")
                 await asyncio.sleep(0.1 * (attempt + 1))
                 continue
 
@@ -124,9 +122,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
             # re-query — React may have shifted the row during mouse travel
             rect2 = await page.evaluate(_find_js)
             if rect2 is None:
-                self.log.debug(
-                    f"'{name}' vanished after mouse arc (attempt {attempt + 1})"
-                )
+                self.log.debug(f"'{name}' vanished after mouse arc (attempt {attempt + 1})")
                 await asyncio.sleep(0.15 * (attempt + 1))
                 continue
 
@@ -138,9 +134,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
             # WPP verify (read-only)
             await asyncio.sleep(0.12)
             try:
-                active_id = await self._bridge._evaluate_stealth(
-                    WAJS_Scripts.get_active_chat_id()
-                )
+                active_id = await self._bridge._evaluate_stealth(WAJS_Scripts.get_active_chat_id())
                 if active_id == chat.id_serialized:
                     self._last_opened_chat_id = chat.id_serialized
                     self.log.debug(f"open_chat verified OK — '{name}' active.")
@@ -169,9 +163,7 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
         window.WPP was deleted by Smash & Grab, so we access via _wpp_key descriptor.
         """
         wpp_key = self._bridge._wpp_key
-        self.log.warning(
-            f"[ANOMALY] WPP fallback open for {chat.id_serialized} — log for Monitor."
-        )
+        self.log.warning(f"[ANOMALY] WPP fallback open for {chat.id_serialized} — log for Monitor.")
         # Ambient pointer drift before magical DOM change (humanize)
         await self.page.mouse.move(random.randint(150, 800), random.randint(150, 500))
         await asyncio.sleep(random.uniform(0.8, 1.5))

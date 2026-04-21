@@ -7,13 +7,14 @@ import logging
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from playwright.async_api import Locator, Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_whatsapp.exceptions import WhatsAppInteractionError
 from camouchat_whatsapp.features.interaction_controller import (
     InteractionController as HumanInteractionController,
 )
-from playwright.async_api import Locator, Page
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 # ============================================================================
 # FIXTURES
@@ -41,9 +42,7 @@ def mock_ui_config():
 
 @pytest.fixture
 def humanize_fixture(mock_page, mock_logger, mock_ui_config):
-    with patch(
-        "camouchat_whatsapp.features.interaction_controller.pyperclip"
-    ) as mock_clip:
+    with patch("camouchat_whatsapp.features.interaction_controller.pyperclip") as mock_clip:
         humanize = HumanInteractionController(
             page=mock_page, log=mock_logger, ui_config=mock_ui_config
         )
@@ -121,9 +120,7 @@ async def test_instant_fill_success(humanize_fixture):
     humanize, _ = humanize_fixture
     mock_source = AsyncMock(spec=Locator)
 
-    result = await humanize._Instant_fill(
-        text="failover", source=mock_source, send=True
-    )
+    result = await humanize._Instant_fill(text="failover", source=mock_source, send=True)
 
     assert result is True
     mock_source.fill.assert_called_with("failover")

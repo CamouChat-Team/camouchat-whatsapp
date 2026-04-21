@@ -4,20 +4,22 @@ Tests cover menu interaction, media attachment, and file handling.
 """
 
 import logging
-from unittest.mock import Mock, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from playwright.async_api import (
-    Page,
-    Locator,
     FileChooser,
+    Locator,
+    Page,
+)
+from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
-from camouchat_whatsapp.exceptions import WhatsappMediaError
-from camouchat_whatsapp import MediaType, FileTyped
-from camouchat_whatsapp.features.media_controller import MediaController
+from camouchat_whatsapp import FileTyped, MediaType
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.exceptions import WhatsappMediaError
+from camouchat_whatsapp.features.media_controller import MediaController
 
 # ============================================================================
 # FIXTURES
@@ -139,9 +141,7 @@ async def test_add_media_success(media_capable_instance, mock_ui_config, tmp_pat
     media_capable_instance.page.expect_file_chooser.return_value = FakeFC()
 
     # Execution
-    result = await media_capable_instance.add_media(
-        file=file_typed, mtype=MediaType.IMAGE
-    )
+    result = await media_capable_instance.add_media(file=file_typed, mtype=MediaType.IMAGE)
 
     # Verification
     assert result is True
