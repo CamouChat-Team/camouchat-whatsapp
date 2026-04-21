@@ -53,8 +53,8 @@ classifiers = [
 ]
 dependencies = [
     "aiosqlite>=0.22.1",
-    "camouchat-browser",
-    "camouchat-core",
+    "camouchat-browser>=0.7.1",
+    "camouchat-core>=0.7.1",
     "filelock>=3.25.2",
     "playwright>=1.58.0",
     "pyperclip>=1.11.0",
