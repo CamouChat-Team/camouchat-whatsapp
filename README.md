@@ -1,8 +1,12 @@
 # CamouChat WhatsApp 🟢
 
+> [!IMPORTANT]
+> 🦊 **This is the CamouChat WhatsApp Plugin Repository.**
+> If you are looking for the main CamouChat project or full ecosystem documentation, please visit our **[Central Repository](https://github.com/CamouChat-Team/CamouChat)**.
+
 High-stealth WhatsApp automation plugin for the CamouChat ecosystem. Built on top of `camouchat-browser` and `WA-JS`, providing a structured, API-driven pipeline for multi-account automation with end-to-end encrypted message storage.
 
-> [!IMPORTANT]
+> [!WARNING]
 > This package requires a **one-time binary fetch** for the underlying Camoufox browser engine after installation. See [Setup](#setup) below.
 
 ## Key Features
