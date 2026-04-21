@@ -1,5 +1,5 @@
 """
-This script demonstrates how to use the SQLAlchemyStorage to store 
+This script demonstrates how to use the SQLAlchemyStorage to store
 and retrieve messages from the database via manual method.
 """
 
@@ -44,7 +44,9 @@ async def main():
     # ── Event Hook ─────────────────────────────────────────────────────────
     wapi = WapiSession(page=page)
 
-    @on_newMsg(wapi_session=wapi) # can also give profile=profile here, it will auto add new_msg to storage
+    @on_newMsg(
+        wapi_session=wapi
+    )  # can also give profile=profile here, it will auto add new_msg to storage
     async def new_msg(msg: MessageModelAPI):
         print("New Msg Arrived with type--")
         print(msg)
