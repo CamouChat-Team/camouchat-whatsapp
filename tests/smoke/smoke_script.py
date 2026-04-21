@@ -20,13 +20,12 @@ from typing import Any
 
 from camouchat_browser import (
     BrowserConfig,
-    BrowserForge,
     CamoufoxBrowser,
     ProfileManager,
 )
 from camouchat_core import Platform
 
-from camouchat_whatsapp import Login, WapiWrapper, WebSelectorConfig
+from camouchat_whatsapp import Login, WapiWrapper
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIG — Fill these in.  No personal data is committed; use your own values.
@@ -641,18 +640,13 @@ async def main() -> None:
     config = BrowserConfig.from_dict(
         {
             "platform": Platform.WHATSAPP,
-            "locale": "en-US",
-            "enable_cache": False,
             "headless": False,
-            "geoip": False,  # skip MaxMind MMDB download (avoids GitHub rate-limit)
-            "fingerprint_obj": BrowserForge(),
         }
     )
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
 
-    ui = WebSelectorConfig(page=page)
-    login = Login(page=page, UIConfig=ui)
+    login = Login(page=page)
     await login.login(method=0)
 
     wapi = WapiWrapper(page=page)

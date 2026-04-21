@@ -1,3 +1,8 @@
+"""
+This script demonstrates how to use the SQLAlchemyStorage to store 
+and retrieve messages from the database via manual method.
+"""
+
 import asyncio
 import traceback
 
@@ -13,7 +18,6 @@ from camouchat_whatsapp import (
     MessageModelAPI,
     SQLAlchemyStorage,
     WapiSession,
-    WebSelectorConfig,
     on_newMsg,
 )
 
@@ -34,14 +38,13 @@ async def main():
     config = BrowserConfig.from_dict({"platform": Platform.WHATSAPP, "headless": False})
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
-    ui = WebSelectorConfig(page=page)
-    login = Login(page=page, UIConfig=ui)
+    login = Login(page=page)
     await login.login(method=0)
 
     # ── Event Hook ─────────────────────────────────────────────────────────
     wapi = WapiSession(page=page)
 
-    @on_newMsg(wapi_session=wapi)
+    @on_newMsg(wapi_session=wapi) # can also give profile=profile here, it will auto add new_msg to storage
     async def new_msg(msg: MessageModelAPI):
         print("New Msg Arrived with type--")
         print(msg)

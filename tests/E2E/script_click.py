@@ -6,16 +6,12 @@ import asyncio
 
 from camouchat_browser import (
     BrowserConfig,
-    BrowserForge,
     CamoufoxBrowser,
     ProfileManager,
 )
 from camouchat_core import Platform
 
-from camouchat_whatsapp import (
-    Login,
-    WebSelectorConfig,
-)
+from camouchat_whatsapp import Login
 
 
 async def main():
@@ -24,23 +20,17 @@ async def main():
     profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
 
     # ── 2. Browser ─────────────────────────────────────────────────────────────
-    browser_forge = BrowserForge()
     config = BrowserConfig.from_dict(
         {
             "platform": Platform.WHATSAPP,
-            "locale": "en-US",
-            "enable_cache": False,
             "headless": False,
-            "fingerprint_obj": browser_forge,
-            "geoip": False,
         }
     )
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
 
     # ── 3. Login (reuses session) ───────────────────────────────────────────────
-    ui = WebSelectorConfig(page=page)
-    login = Login(page=page, UIConfig=ui)
+    login = Login(page=page)
     await login.login(method=0)  # Auto Handles saved Persistence.
 
     # ── 4. Click Test ───────────────────────────────────────────────────────────
