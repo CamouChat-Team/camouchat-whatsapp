@@ -113,4 +113,5 @@ dev = [
     "ruff>=0.15.10",
     "types-pyperclip>=1.9.0.20241221",
     "deptry>=0.25.1",
+    "pre-commit>=4.5.1",
 ]

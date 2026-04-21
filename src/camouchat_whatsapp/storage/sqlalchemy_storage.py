@@ -72,7 +72,7 @@ class SQLAlchemyStorage(StorageProtocol):
 
         Args:
             queue: Async queue for message batching (created automatically if None)
-            db_credentials: DB credential dict 
+            db_credentials: DB credential dict
                 (storage_type, username, password, host, port, database_name, database_path)
             log: Logger instance
             batch_size: Max messages before auto-flush

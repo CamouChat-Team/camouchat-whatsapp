@@ -424,13 +424,13 @@ class WebSelectorConfig(UiConfigProtocol):
     # ---------------------------- Message Other Option ------------------------------ #
     """
     Options :
-    --Group info 
+    --Group info
     --select messages
     --Mute notifications
     --Disappearing messages
     --Add to favourite
-    --close chat 
-    --clear chat 
+    --close chat
+    --clear chat
     --Exit group
     """
 

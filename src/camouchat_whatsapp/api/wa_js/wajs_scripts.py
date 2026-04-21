@@ -279,7 +279,7 @@ class WAJS_Scripts:
                                 sObj[k] = v;
                             }}
                         }}
-                        // Resolve inner Wid properties 
+                        // Resolve inner Wid properties
                         if (attrs.senderObj.id) sObj['id_serialized'] = attrs.senderObj.id._serialized;
                         dump['senderObj'] = sObj;
                     }}
@@ -567,7 +567,7 @@ class WAJS_Scripts:
                 if (attrs.to)     dump['to_serialized']     = attrs.to._serialized   ?? attrs.to;
                 if (attrs.author) dump['author_serialized'] = attrs.author._serialized ?? null;
                 if (attrs.quotedMsg?.id) dump['quotedMsgId'] = attrs.quotedMsg.id._serialized;
-                
+
                 if (Array.isArray(attrs.mentionedJidList)) {{
                     dump['mentionedJidList'] = attrs.mentionedJidList;
                 }}

@@ -13,7 +13,6 @@ work = pm.create_profile(platform=Platform.WHATSAPP, profile_id="work")
 
 
 async def main():
-
     browser = CamoufoxBrowser(config=config, profile=work)
     page = await browser.get_page()
 

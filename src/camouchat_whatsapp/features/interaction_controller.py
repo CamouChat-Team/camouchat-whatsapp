@@ -357,7 +357,6 @@ class InteractionController(InteractionControllerProtocol):
         return data_id.startswith("true_")
 
     async def _ensure_clean_input(self, source: ElementHandle | Locator, retries: int = 3) -> None:
-
         for attempt in range(1, retries + 1):
             try:
                 text = await source.inner_text()

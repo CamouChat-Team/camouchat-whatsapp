@@ -46,7 +46,7 @@ pip install camouchat-whatsapp "camoufox[geoip]"
 
 ## Setup
 
-> [!WARNING]  
+> [!WARNING]
 > `uv sync` / `pip install` alone are **not enough**. You must fetch the Camoufox browser binary separately.
 
 ### With `uv`
