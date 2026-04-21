@@ -30,6 +30,11 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
+      - name: Inject Git Sources for Build
+        run: |
+          uv add "camouchat-core @ git+https://github.com/CamouChat-Team/camouchat-core@main"
+          uv add "camouchat-browser @ git+https://github.com/CamouChat-Team/camouchat-browser@main"
+
       - name: Build distributions
         run: uv build --package camouchat-whatsapp
 
