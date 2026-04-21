@@ -145,6 +145,14 @@ if __name__ == "__main__":
 - Respect **rate limits** — avoid burst-sending messages.
 - Use **test accounts** before deploying on real numbers.
 
+## ⚠️ Important Beta Information
+
+> [!WARNING]
+> This package is currently in **BETA Version**. Errors and inconsistencies are expected.
+> - It is **highly recommended** to use test accounts.
+> - Start with **one browser** in **headed mode**.
+> - Avoid using multi-account automation until the full **1.0.0 release**.
+
 ## Documentation
 
 - [WA-JS Integration](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/docs/wa_js.md)
