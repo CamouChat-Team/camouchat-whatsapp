@@ -1,4 +1,30 @@
-"""Independent class for Message Filtering"""
+"""
+Independent class for Message Filtering.
+
+.. deprecated::
+    **MessageFilter is NOT compatible with the current API-based architecture.**
+
+    This class was written against the older DOM-scraping pipeline where
+    ``from_chat`` was a full ``ChatProtocol`` object with an ``id_serialized``
+    attribute. In the current ``MessageModelAPI``, ``from_chat`` is a plain
+    ``str`` (always ``""`` by default) — so all per-chat rate-limit buckets
+    collapse into a single key, making the filter effectively broken.
+
+    **Do not use MessageFilter until v0.7.4.**
+    A rewritten, API-aware version will ship in the **v0.7.4** patch.
+    That version will key rate-limits on ``msg.jid_From`` and integrate
+    cleanly with ``MessageModelAPI``.
+
+    In the meantime, filter manually inside your ``@on_newMsg`` handler::
+
+        @on_newMsg(wapi_session=wapi)
+        async def handle(msg: MessageModelAPI):
+            if msg.fromMe or msg.isMdHistoryMsg:
+                return  # skip outbound / history-sync messages
+            if msg.msgtype not in ("chat", "image", "document"):
+                return  # skip non-text/media types
+            # your logic here
+"""
 
 from __future__ import annotations
 
@@ -61,6 +87,18 @@ class MessageFilter:
         Max_Messages_Per_Window: int = 10,
         Window_Seconds: int = 60,
     ):
+        import warnings
+
+        warnings.warn(
+            "MessageFilter is not compatible with the current API architecture "
+            "(camouchat-whatsapp >= 0.7.x). The filter was built for the legacy "
+            "DOM-scraping pipeline and will not work correctly with MessageModelAPI. "
+            "Avoid using it until the v0.7.4 patch which ships a full rewrite. "
+            "Filter messages manually via msg.jid_From, msg.fromMe, and msg.msgtype "
+            "in your @on_newMsg handler instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.LimitTime = LimitTime
         self.Max_Messages_Per_Window = Max_Messages_Per_Window
         self.Window_Seconds = Window_Seconds

@@ -44,13 +44,13 @@ CFG = {
     "media_chat_id": None,
     # Group name to auto-resolve as the media test chat (RAM lookup, zero network).
     # Only used when media_chat_id is None.
-    "media_group_name": "YOUR_GROUP_NAME",
+    "media_group_name": "",
     # Directory where extracted media files will be saved.
     "media_save_dir": "/tmp/camouchat_media",
     # Newsletter search query for test_newsletter_search.
     "newsletter_search_query": "technology",
     # CamouChat profile ID (matches the profile used in production).
-    "profile_id": "Work",
+    "profile_id": "work",
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -282,7 +282,15 @@ async def test_group_list(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     Fetch all groups you're a member of (RAM read).
     Prints count and full raw ChatModel dump of the first group.
     """
-    groups = await wapi.group_get_all()
+    try:
+        groups = await wapi.group_get_all()
+    except Exception as exc:
+        if "g is undefined" in str(exc):
+            print(
+                "  ⚠  ChatStore has null skeleton entries — WA Web is still syncing "
+                "group metadata. Wait ~10-30s after login and re-run."
+            )
+        raise
     print(f"  Total groups: {len(groups)}")
     if groups:
         print("  First group raw dump:")
@@ -294,7 +302,15 @@ async def test_group_details(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     Admin check, invite code fetch (if admin), and global size limit (RAM).
     Invite code fetch is skipped automatically if not admin.
     """
-    groups = await wapi.group_get_all()
+    try:
+        groups = await wapi.group_get_all()
+    except Exception as exc:
+        if "g is undefined" in str(exc):
+            print(
+                "  ⚠  ChatStore has null skeleton entries — WA Web is still syncing "
+                "group metadata. Wait ~10-30s after login and re-run."
+            )
+        raise
     if not groups:
         print("  No groups found.")
         return
@@ -363,7 +379,15 @@ async def test_community(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     Find a Community parent group and list its subgroups + announcement group.
     Skipped automatically if no community parent exists in your chats.
     """
-    groups = await wapi.group_get_all()
+    try:
+        groups = await wapi.group_get_all()
+    except Exception as exc:
+        if "g is undefined" in str(exc):
+            print(
+                "  ⚠  ChatStore has null skeleton entries — WA Web is still syncing "
+                "group metadata. Wait ~10-30s after login and re-run."
+            )
+        raise
     parent = next(
         (g for g in groups if g.get("isParentGroup") or g.get("__x_isParentGroup")),
         None,
@@ -413,7 +437,15 @@ async def test_media_extract(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     media_id = cfg.get("media_chat_id")
     if not media_id:
         group_name = cfg.get("media_group_name", "")
-        all_groups = await wapi.group_get_all()
+        try:
+            all_groups = await wapi.group_get_all()
+        except Exception as exc:
+            if "g is undefined" in str(exc):
+                print(
+                    "  ⚠  ChatStore has null skeleton entries — WA Web is still syncing "
+                    "group metadata. Wait ~10-30s after login and re-run."
+                )
+            raise
         media_group = next(
             (
                 g

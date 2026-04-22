@@ -17,8 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed `open_chat` reliability under heavy load using enhanced retry logic, mouse micro-corrections, and virtualized `scrollIntoView` (fully supports headless/Xvfb).
 - Hardened API stealth engine bridge execution, enhanced _evaluate_stealth with success , error dict, and some tweaks.
-- SqlalchmeyStorage is now uses new ProfileManager Structure , and dialect can be changed with db_credendials.
+- SqlalchmeyStorage is now uses new ProfileManager Structure , and dialect can be changed with db_credendials and much more control over database.
 - scripts added and fixed in order to test new Hooks.
+- smoke test script added in order to test new hooks.
+- on_newMsg now adds RegistryConfig which can handle these inside @on_newMsg and RegistryConfig can fetch the storage.
+- giving profile in the Registry now send msg to be automatically to be in storage saved.
 
 ## [0.7.2] — 2026-04-18
 
