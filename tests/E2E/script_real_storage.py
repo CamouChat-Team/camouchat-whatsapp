@@ -1,19 +1,23 @@
+"""
+This script demonstrates how to use the SQLAlchemyStorage to store
+and retrieve messages from the database via manual method.
+"""
+
 import asyncio
 import traceback
 
 from camouchat_browser import (
     BrowserConfig,
-    BrowserForge,
     CamoufoxBrowser,
     ProfileManager,
 )
 from camouchat_core import Platform
+
 from camouchat_whatsapp import (
     Login,
     MessageModelAPI,
     SQLAlchemyStorage,
     WapiSession,
-    WebSelectorConfig,
     on_newMsg,
 )
 
@@ -21,33 +25,28 @@ from camouchat_whatsapp import (
 async def main():
     # ── Setup Storage (Once) ───────────────────────────────────────────────
     pm = ProfileManager()
-    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
+    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="work")
+    print("profile path : ", profile.profile_dir)
     # Initialize storage once outside the loop
-    storage = SQLAlchemyStorage.from_profile(profile=profile, queue=asyncio.Queue())
+    storage = SQLAlchemyStorage.from_profile(profile=profile)
     await storage.start()
 
     save_ids = []
     msgs_batch = []
 
     # ── Browser & Login ────────────────────────────────────────────────────
-    browser_forge = BrowserForge()
-    config = BrowserConfig.from_dict(
-        {
-            "platform": Platform.WHATSAPP,
-            "headless": False,
-            "fingerprint_obj": browser_forge,
-        }
-    )
+    config = BrowserConfig.from_dict({"platform": Platform.WHATSAPP, "headless": False})
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
-    ui = WebSelectorConfig(page=page)
-    login = Login(page=page, UIConfig=ui)
+    login = Login(page=page)
     await login.login(method=0)
 
     # ── Event Hook ─────────────────────────────────────────────────────────
     wapi = WapiSession(page=page)
 
-    @on_newMsg(wapi_session=wapi)
+    @on_newMsg(
+        wapi_session=wapi
+    )  # can also give profile=profile here, it will auto add new_msg to storage
     async def new_msg(msg: MessageModelAPI):
         print("New Msg Arrived with type--")
         print(msg)
@@ -58,11 +57,8 @@ async def main():
     await new_msg()
 
     try:
-        print(
-            "\n>>> Listening for messages... Press Ctrl+C to stop and view data from DB."
-        )
-        while True:
-            await asyncio.sleep(1)
+        print("\n>>> Listening for messages... Press Ctrl+C to stop and view data from DB.")
+        await asyncio.Event().wait()
     except asyncio.CancelledError:
         pass
     finally:
@@ -78,10 +74,7 @@ async def main():
 
         for msg in db_msgs:
             body = msg.get("body") or ""
-            if len(body) > 100:
-                body_disp = f"{body[:40]}...[truncated {len(body)} chars]"
-            else:
-                body_disp = body
+            body_disp = f"{body[:40]}...[truncated {len(body)} chars]" if len(body) > 100 else body
 
             print("\n--- Found DB Record ---")
             print(f"ID     : {msg.get('id_serialized')}")
@@ -95,9 +88,7 @@ async def main():
             print(f"E-Nonce: {msg.get('encryption_nonce')}")
             print("-----------------------")
 
-        import os
-
-        await CamoufoxBrowser.close_browser_by_pid(os.getpid())
+        await CamoufoxBrowser.close_browser_by_profile(profile=profile)
 
 
 if __name__ == "__main__":

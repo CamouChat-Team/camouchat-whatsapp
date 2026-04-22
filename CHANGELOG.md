@@ -6,8 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.7.3] — Unreleased
 
-## [0.7.0] — Unreleased
+### Added
+- Added smoke test script for JS synthetic clicks vs Camoufox physical humanized clicks.
+- Added `mentionList` parameter support to send mentions via `send_api_text()`.
+- fallback check for newsletter/channels in open_chat()
+- Added storage decorator @on_storage inside @on_newMsg decorator , added RegistryConfig to handle these inside @on_newMsg.
+
+### Fixed
+- Fixed `open_chat` reliability under heavy load using enhanced retry logic, mouse micro-corrections, and virtualized `scrollIntoView` (fully supports headless/Xvfb).
+- Hardened API stealth engine bridge execution, enhanced _evaluate_stealth with success , error dict, and some tweaks.
+- SqlalchmeyStorage is now uses new ProfileManager Structure , and dialect can be changed with db_credendials and much more control over database.
+- scripts added and fixed in order to test new Hooks.
+- smoke test script added in order to test new hooks.
+- on_newMsg now adds RegistryConfig which can handle these inside @on_newMsg and RegistryConfig can fetch the storage.
+- giving profile in the Registry now send msg to be automatically to be in storage saved.
+
+## [0.7.2] — 2026-04-18
+
+### Fixed
+- Fixed Quick Start code example in README.
+
+## [0.7.1] — 2026-04-15
+
+### Fixed
+- Updated README documentation.
+
+---
+
+## [0.7.0] — 2026-04-15
 
 This release marks the extraction of the WhatsApp plugin from the original CamouChat monorepo into a standalone, independently versioned package.
 

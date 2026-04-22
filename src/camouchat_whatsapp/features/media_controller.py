@@ -3,33 +3,36 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 import re
 import weakref
 from logging import Logger, LoggerAdapter
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
-from camouchat_whatsapp.exceptions import WhatsappMediaError, WhatsAppError
-from camouchat_whatsapp.api import WapiSession
-from camouchat_whatsapp.api.models import MessageModelAPI
-from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_browser import ProfileInfo
-from camouchat_core import MediaControllerProtocol, MediaType, FileTyped
+from camouchat_core import FileTyped, MediaControllerProtocol, MediaType
 from playwright.async_api import (
-    Page,
-    Locator,
     FileChooser,
+    Locator,
+    Page,
+)
+from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
+from camouchat_whatsapp.api import WapiSession
+from camouchat_whatsapp.api.models import MessageModelAPI
+from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.exceptions import WhatsAppError, WhatsappMediaError
 from camouchat_whatsapp.logger import w_logger
 
 # Todo add logger later.
 
 
 # ── Media-type → category bucket ──────────────────────────────────────────────
-_WA_TYPE_TO_CATEGORY: Dict[str, str] = {
+_WA_TYPE_TO_CATEGORY: dict[str, str] = {
     "image": "image",
     "sticker": "image",
     "video": "video",
@@ -42,7 +45,7 @@ _WA_TYPE_TO_CATEGORY: Dict[str, str] = {
 }
 
 # Category → ProfileInfo attribute name for the save directory
-_CATEGORY_TO_PROFILE_ATTR: Dict[str, str] = {
+_CATEGORY_TO_PROFILE_ATTR: dict[str, str] = {
     "image": "media_images_dir",
     "video": "media_videos_dir",
     "audio": "media_voice_dir",
@@ -63,41 +66,36 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
         Retries every second until WA's render cycle caches the blob.
     """
 
-    _instances: weakref.WeakKeyDictionary[Page, MediaController] = (
-        weakref.WeakKeyDictionary()
-    )
+    _instances: weakref.WeakKeyDictionary[Page, MediaController] = weakref.WeakKeyDictionary()
     _initialized: bool = False
 
     def __new__(cls, *args, **kwargs) -> MediaController:
         page = kwargs.get("page") or (args[0] if args else None)
         if page is None:
-            return super(MediaController, cls).__new__(cls)
+            return super().__new__(cls)
         if page not in cls._instances:
-            instance = super(MediaController, cls).__new__(cls)
+            instance = super().__new__(cls)
             cls._instances[page] = instance
         return cls._instances[page]
 
     def __init__(
         self,
         page: Page,
-        ui_config: Optional[WebSelectorConfig] = None,
-        log: Optional[Union[Logger, LoggerAdapter]] = None,
-        wapi: Optional[WapiSession] = None,
-        profile: Optional[ProfileInfo] = None,
+        ui_config: WebSelectorConfig | None = None,
+        log: Logger | LoggerAdapter | None = None,
+        wapi: WapiSession | None = None,
+        profile: ProfileInfo | None = None,
         **kwargs,
     ):
         if hasattr(self, "_initialized") and self._initialized:
             return
-        ui_config = ui_config or kwargs.pop("UIConfig", None)
-        if ui_config is None:
-            raise ValueError("ui_config must not be None")
         self.page = page
-        self.ui_config = ui_config
+        self.ui_config = ui_config or WebSelectorConfig(page=page)
         self.log = log or w_logger
         if self.page is None:
             raise ValueError("page must not be None")
-        self._wapi: Optional[WapiSession] = wapi
-        self._profile: Optional[ProfileInfo] = profile
+        self._wapi: WapiSession | None = wapi
+        self._profile: ProfileInfo | None = profile
         self._initialized = True
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -107,9 +105,7 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
     async def menu_clicker(self) -> None:
         """Open the attachment menu."""
         try:
-            menu_icon = await self.ui_config.plus_rounded_icon().element_handle(
-                timeout=1000
-            )
+            menu_icon = await self.ui_config.plus_rounded_icon().element_handle(timeout=1000)
 
             if not menu_icon:
                 raise WhatsappMediaError(
@@ -145,17 +141,18 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
                 await target.click(timeout=3000)
             chooser: FileChooser = await fc.value
 
-            p = Path(file.uri)
-            if not p.exists() or not p.is_file():
+            p_str = str(file.uri)
+            if not await asyncio.to_thread(os.path.exists, p_str) or not await asyncio.to_thread(
+                os.path.isfile, p_str
+            ):
                 raise WhatsappMediaError(f"Invalid file path: {file.uri}")
 
-            await chooser.set_files(str(p.resolve()))
+            abs_path = await asyncio.to_thread(os.path.abspath, p_str)
+            await chooser.set_files(abs_path)
             if force:
                 await asyncio.sleep(random.uniform(0.6, 1.0))
                 try:
-                    send_btn = self.page.get_by_role(
-                        "button", name=re.compile(r"send", re.I)
-                    ).last
+                    send_btn = self.page.get_by_role("button", name=re.compile(r"send", re.I)).last
                     await send_btn.click(timeout=4000)
                     self.log.debug("Media preview send button clicked.")
                 except Exception:
@@ -163,7 +160,7 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
                     await self.page.keyboard.press("Enter")
                     self.log.debug("Media preview closed via Enter key.")
 
-            self.log.info(f" --- Sent {str(p.resolve())} , [Mtype] = [{mtype}] ")
+            self.log.info(f" --- Sent {abs_path} , [Mtype] = [{mtype}] ")
             return True
 
         except PlaywrightTimeoutError as e:
@@ -192,7 +189,7 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
     # DOWNLOAD
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _resolve_save_dir(self, wa_type: Optional[str]) -> Path:
+    def _resolve_save_dir(self, wa_type: str | None) -> Path:
         """Map a WhatsApp MsgType string to the correct ProfileInfo directory."""
         if self._profile is None:
             raise WhatsappMediaError(
@@ -206,8 +203,8 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
     async def save_media(
         self,
         message: MessageModelAPI,
-        filename: Optional[str] = None,
-    ) -> Optional[str]:
+        filename: str | None = None,
+    ) -> str | None:
         """
         Download and save media from a MessageModelAPI message — Cache API only.
 
@@ -247,7 +244,7 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
         save_dir = self._resolve_save_dir(wa_type)
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        raw: Dict[str, Any] = {
+        raw: dict[str, Any] = {
             "type": wa_type,
             "directPath": message.directPath,
             "mediaKey": message.mediaKey,
@@ -277,7 +274,5 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
         )
 
         path = result.get("path") if result.get("success") else None
-        self.log.debug(
-            f"[save_media] type={wa_type!r} category={category!r} path={path!r}"
-        )
+        self.log.debug(f"[save_media] type={wa_type!r} category={category!r} path={path!r}")
         return path

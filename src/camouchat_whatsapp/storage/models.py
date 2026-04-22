@@ -3,7 +3,7 @@ SQLAlchemy database models for message storage.
 Supports SQLite, PostgreSQL, and MySQL.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -28,9 +28,7 @@ class Message(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Message identification
-    id_serialized: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True
-    )
+    id_serialized: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
 
     # Message content
     body: Mapped[str] = mapped_column(Text, nullable=True)
@@ -39,9 +37,7 @@ class Message(Base):
     fromMe: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Chat relationship
-    chat_id: Mapped[str] = mapped_column(
-        String(255), nullable=False, default="", index=True
-    )
+    chat_id: Mapped[str] = mapped_column(String(255), nullable=False, default="", index=True)
 
     # Extra API metadata
     meta_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -49,7 +45,7 @@ class Message(Base):
     # Timing
     timestamp: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True
+        DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True
     )
 
     # Composite indexes for common queries

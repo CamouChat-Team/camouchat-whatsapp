@@ -8,10 +8,11 @@ Managers :
 
 from playwright.async_api import Page
 
+from camouchat_whatsapp.logger import w_logger
+
 from .managers import ChatApiManager, MessageApiManager
 from .models import ChatModelAPI, MessageModelAPI
 from .wa_js import WapiWrapper
-from camouchat_whatsapp.logger import w_logger
 
 __all__ = [
     "WapiSession",

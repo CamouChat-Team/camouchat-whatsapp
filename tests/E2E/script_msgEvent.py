@@ -6,18 +6,12 @@ import asyncio
 
 from camouchat_browser import (
     BrowserConfig,
-    BrowserForge,
     CamoufoxBrowser,
     ProfileManager,
 )
-from camouchat_core import Platform
-from camouchat_whatsapp import (
-    FileTyped,
-    Login,
-    MediaController,
-    MediaType,
-    WebSelectorConfig,
-)
+from camouchat_core import FileTyped, MediaType, Platform
+
+from camouchat_whatsapp import Login, MediaController
 
 
 async def main():
@@ -26,23 +20,26 @@ async def main():
     profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
 
     # ── 2. Browser ─────────────────────────────────────────────────────────────
-    browser_forge = BrowserForge()
+    # browser_forge = BrowserForge() # Used to Generate Random Fingerprints for the browser ,
+    # Also handles automatic generation of fingerprints if not provided.
     config = BrowserConfig.from_dict(
         {
             "platform": Platform.WHATSAPP,
-            "locale": "en-US",
-            "enable_cache": False,
+            # "locale": "en-US",
+            # "enable_cache": False,
             "headless": False,
-            "fingerprint_obj": browser_forge,
-            "geoip": False,
+            # "fingerprint_obj": browser_forge, changed to fingerprint, also default auto sets.
+            # "geoip": False,
         }
+        # Other Commented Values are default Testing based, if used for real script ,
+        #  considering updating them Proxy based requirements. etc.
     )
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
 
     # ── 3. Login (reuses session) ───────────────────────────────────────────────
-    ui = WebSelectorConfig(page=page)
-    login = Login(page=page, UIConfig=ui)
+    # ui = WebSelectorConfig(page=page)
+    login = (Login(page=page),)  # UIConfig=ui) # default setup can take.
     await login.login(method=0)  # Auto Handles saved Persistence.
 
     # ── 4. Message event hook ───────────────────────────────────────────────────
@@ -54,10 +51,12 @@ async def main():
     )
 
     wapi = WapiSession(page=page)
-    interaction = InteractionController(page=page, ui_config=ui, wapi=wapi)
-    media = MediaController(page=page, UIConfig=ui, wapi=wapi, profile=profile)
+    interaction = InteractionController(page=page, wapi=wapi)  # , ui_config=ui,
+    media = MediaController(page=page, wapi=wapi, profile=profile)  # ,  UIConfig=ui,
 
-    @on_newMsg(wapi_session=wapi)  # Pass the Wapi Session object here
+    # Pass the Wapi Session object here
+    # Also if profile passed it it will auto save msgs to Storage.
+    @on_newMsg(wapi_session=wapi, profile=profile)
     async def new_msg(msg: MessageModelAPI):
         print("\n --------- New Msg Arrived ───────────────────────────────────")
         print(msg, "\n")
@@ -68,8 +67,10 @@ async def main():
         print(chat)
         await wapi.chat_manager.open_chat(chat=chat)
         print(
-            f"----------------Chat Opened name = {chat.formattedTitle} , id = {chat.id_serialized} \n"
+            f"----------------Chat Opened name = {chat.formattedTitle} , "
+            f"id = {chat.id_serialized} \n"
         )
+        success = False
 
         # Process the msg Commands by some dummy commands.
         if msg.body == "!ping":
@@ -77,9 +78,13 @@ async def main():
             # await replyObj.quote_only(message=msg)  # UI: Trigger the quote/reply bubble
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
-                text="**You have been Ponged!!!** \ud83c\udfd3\n_Reply from CamouChat Stealth Bridge_",
+                text=(
+                    "**You have been Ponged!!!** \ud83c\udfd3\n"
+                    "_Reply from CamouChat Stealth Bridge_"
+                ),
                 quoted_msg_id=msg.id_serialized,
             )
+            success = True
 
         elif msg.body == "!info":
             print(f"[*] Command triggered: !info from {msg.jid_From}")
@@ -90,7 +95,8 @@ async def main():
                 f"\u2022 Title: {chat.formattedTitle}\n"
                 f"\u2022 JID: {chat.id_serialized}\n"
                 f"\u2022 Unread: {chat.unreadCount}\n"
-                f"\u2022 Is Group: {chat.groupType}\n"
+                f"\u2022 GroupType: {chat.groupType}\n"
+                f"\u2022 GroupSafetyChecked Flag: {chat.groupSafetyChecked}\n"
                 f"\u2022 Is Archived: {chat.isArchived}\n"
             )
             await interaction.send_api_text(
@@ -98,17 +104,23 @@ async def main():
                 chat_id=msg.jid_From,
                 quoted_msg_id=msg.id_serialized,
             )
+            success = True
 
         elif msg.body == "!me":
             print("[*] Command triggered: !me (Identity Extraction)")
             # Tests identity and sender objects
-            sender_name = getattr(msg.senderObj, "formattedName", "Unknown")
-            push_name = getattr(msg.senderObj, "pushname", "Unknown")
+            sender_name = msg.author if chat.groupType != "DEFAULT" else chat.id_serialized
+            push_name = msg.pushname
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
-                text=f"\ud83d\udc64 *Identity Profile*\n\u2022 Name: {sender_name}\n\u2022 PushName: {push_name}",
+                text=(
+                    f"\ud83d\udc64 *Identity Profile*\n"
+                    f"\u2022 Sender_id: {sender_name}\n"
+                    f"\u2022 PushName: {push_name}"
+                ),
                 quoted_msg_id=msg.id_serialized,
             )
+            success = True
 
         elif msg.body and msg.body.startswith("!echo "):
             print("[*] Command triggered: !echo (Humanized Interaction)")
@@ -119,6 +131,7 @@ async def main():
                 quote=True,  # add quote using browser automation
                 send=True,  # send to send text or not.
             )
+            success = True
 
         elif msg.body and msg.body == "!media":
             print("[*] Command triggered: !media — requesting test image upload")
@@ -127,6 +140,7 @@ async def main():
                 text="📎 Send me any image, video, or audio to test media save+resend.",
                 quoted_msg_id=msg.id_serialized,
             )
+            success = True
 
         elif msg.msgtype in (
             "image",
@@ -178,13 +192,15 @@ async def main():
             else:
                 print("[!] add_media returned False — re-send may have failed.")
 
+            success = True
+
+        print("Success for this cmd completion = ", success)
+
     # Keep the script running to listen for events
     await new_msg()
 
-    print(
-        "\n[\u2714] Hook active. Try sending !ping, !info, !me, or !echo <text> in WhatsApp."
-    )
-    await asyncio.sleep(3600)  # 1 hour running.
+    print("\n[\u2714] Hook active. Try sending !ping, !info, !me, or !echo <text> in WhatsApp.")
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":

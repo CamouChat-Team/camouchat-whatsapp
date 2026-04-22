@@ -19,8 +19,15 @@ class WAJS_Scripts:
         """Check if WhatsApp session is authenticated."""
         return "wpp.conn.isAuthenticated()"
 
-    # ─────────────────────────────────────────────
-    # 2. CHAT METADATA
+    @classmethod
+    def get_active_chat_id(cls) -> str:
+        """
+        Returns the JID (_serialized) of the currently active/visible chat.
+        Sync read — no network, no side effects. Safe for post-click verification.
+        Returns null if no chat is open.
+        """
+        return "Promise.resolve(wpp.chat.getActiveChat()?.id?._serialized ?? null)"
+
     # ─────────────────────────────────────────────
 
     @classmethod
@@ -272,7 +279,7 @@ class WAJS_Scripts:
                                 sObj[k] = v;
                             }}
                         }}
-                        // Resolve inner Wid properties 
+                        // Resolve inner Wid properties
                         if (attrs.senderObj.id) sObj['id_serialized'] = attrs.senderObj.id._serialized;
                         dump['senderObj'] = sObj;
                     }}
@@ -380,10 +387,18 @@ class WAJS_Scripts:
     # ─────────────────────────────────────────────
 
     @classmethod
-    def send_text_message(cls, chat_id: str, message: str) -> str:
-        """Pure api text send — no UI interaction required."""
+    def send_text_message(cls, chat_id: str, message: str, options: dict | None = None) -> str:
+        """
+        Pure api text send — no UI interaction required.
+
+        Note: Fire-and-forget pattern. The WPP Promise is started but not awaited
+        in the bridge — sendTextMessage may wait for server ACK which can take
+        seconds in group chats. Bridge returns True immediately; send runs async.
+        """
         safe_msg = json.dumps(message)
-        return f"wpp.chat.sendTextMessage('{chat_id}', {safe_msg})"
+        safe_opts = json.dumps(options) if options else "{}"
+        # Comma operator: fires sendTextMessage (error silenced), returns true instantly.
+        return f"(wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_opts}).catch(() => null), true)"
 
     @classmethod
     def mark_is_read(cls, chat_id: str) -> str:
@@ -552,7 +567,7 @@ class WAJS_Scripts:
                 if (attrs.to)     dump['to_serialized']     = attrs.to._serialized   ?? attrs.to;
                 if (attrs.author) dump['author_serialized'] = attrs.author._serialized ?? null;
                 if (attrs.quotedMsg?.id) dump['quotedMsgId'] = attrs.quotedMsg.id._serialized;
-                
+
                 if (Array.isArray(attrs.mentionedJidList)) {{
                     dump['mentionedJidList'] = attrs.mentionedJidList;
                 }}
@@ -1280,9 +1295,7 @@ class WAJS_Scripts:
         return f"wpp.chat.markIsComposing('{chat_id}', {duration_ms}).then(() => true)"
 
     @classmethod
-    def decrypt_media(
-        cls, direct_path: str, media_key_b64: str, media_type: str
-    ) -> str:
+    def decrypt_media(cls, direct_path: str, media_key_b64: str, media_type: str) -> str:
         """
         Tier 1 Cache extraction. Legacy/Redundant now that we use downloadMedia,
         but kept for API compatibility. Returns null to force Tier 2/3 fallback.

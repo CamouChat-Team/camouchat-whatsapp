@@ -14,17 +14,19 @@ Type notation used in docstrings:
 
 import asyncio
 import base64
+import contextlib
+import os
+from collections.abc import Callable, Sequence
 from logging import Logger, LoggerAdapter
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union, Sequence
+from typing import Any
 
 from camouchat_core import MessageProcessorProtocol, StorageProtocol
-from camouchat_whatsapp.core.noop import NoOpMessageFilter, NoOpStorage
 
-from camouchat_whatsapp.logger import w_logger
-from camouchat_whatsapp.filters.message_filter import MessageFilter
 from camouchat_whatsapp.api.models import ChatModelAPI, MessageModelAPI
-from camouchat_whatsapp.api.wa_js import WapiWrapper, WAJS_Scripts
+from camouchat_whatsapp.api.wa_js import WAJS_Scripts, WapiWrapper
+from camouchat_whatsapp.core.noop import NoOpMessageFilter, NoOpStorage
+from camouchat_whatsapp.filters.message_filter import MessageFilter
+from camouchat_whatsapp.logger import w_logger
 
 
 class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI]):
@@ -47,9 +49,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
     def __init__(
         self,
         bridge: WapiWrapper,
-        log: Optional[Union[Logger, LoggerAdapter]] = None,
-        storage_obj: Optional[StorageProtocol] = None,
-        filter_obj: Optional[MessageFilter] = None,
+        log: Logger | LoggerAdapter | None = None,
+        storage_obj: StorageProtocol | None = None,
+        filter_obj: MessageFilter | None = None,
     ) -> None:
         self.page = None
         self.ui_config = None
@@ -58,10 +60,16 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         self.log = log or w_logger
         self._bridge = bridge
         self._bridge_active: bool = False
-        self._handlers: List[Callable[[MessageModelAPI], Any]] = []
+        self._handlers: list[Callable[[MessageModelAPI], Any]] = []
         self._id_queue: asyncio.Queue = asyncio.Queue()
-        self._drain_task: Optional[asyncio.Task] = None
-        self._poll_task: Optional[asyncio.Task] = None
+        self._drain_task: asyncio.Task | None = None
+        self._poll_task: asyncio.Task | None = None
+
+    def _save_bytes(self, path: str, data: bytes) -> None:
+        """Sync helper for writing bytes to disk."""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
 
     # ──────────────────────────────────────────────
     # EVENT-DRIVEN LISTENER  (Push Architecture)
@@ -78,7 +86,8 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         if callback not in self._handlers:
             self._handlers.append(callback)
             self.log.info(
-                f"MessageApiManager: registered handler '{getattr(callback, '__name__', repr(callback))}' "
+                f"MessageApiManager: registered handler "
+                f"'{getattr(callback, '__name__', repr(callback))}' "
                 f"(total={len(self._handlers)})"
             )
 
@@ -93,18 +102,14 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
           4. _drain_loop dequeues → RAM fetch → MessageModelAPI → handlers.
         """
         if self._bridge_active:
-            self.log.warning(
-                "MessageApiManager: bridge already active, skipping re-setup."
-            )
+            self.log.warning("MessageApiManager: bridge already active, skipping re-setup.")
             return
 
         await self._bridge.setup_message_bridge()
         self._drain_task = asyncio.ensure_future(self._drain_loop())
         self._poll_task = asyncio.ensure_future(self._poll_loop())
         self._bridge_active = True
-        self.log.info(
-            "MessageApiManager: DOM bridge active, ready to receive messages."
-        )
+        self.log.info("MessageApiManager: DOM bridge active, ready to receive messages.")
 
     async def _poll_loop(self) -> None:
         """
@@ -148,13 +153,11 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         Called from _drain_loop — NOT inside an expose_function callback.
         """
         try:
-            raw: Dict[str, Any] = await self._bridge._evaluate_stealth(
+            raw: dict[str, Any] = await self._bridge._evaluate_stealth(
                 WAJS_Scripts.get_message_by_id(id_serialized)
             )
             if not raw:
-                self.log.warning(
-                    f"MessageApiManager: RAM lookup empty for id={id_serialized!r}"
-                )
+                self.log.warning(f"MessageApiManager: RAM lookup empty for id={id_serialized!r}")
                 return
 
             # filters own messages: WPP fires chat.new_message for outgoing messages too.
@@ -165,15 +168,12 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
             #     (WA Web received it from the server — it traveled the wire)
             id_str = raw.get("id_serialized") or ""
             if id_str.startswith("true_") and not raw.get("recvFresh"):
-                self.log.debug(
-                    f"MessageApiManager: skipping own sent message id={id_serialized!r}"
-                )
+                self.log.debug(f"MessageApiManager: skipping own sent message id={id_serialized!r}")
                 return
 
             # ciphertext = The message arrived on the wire before WA finished E2E decryption.
             # WA will re-fire the same id_serialized once decrypted with the real type.
             # We pass it through as-is (type='ciphertext') so the caller can decide to
-            # skip or queue it.  DO NOT mutate type→'viewonce' here — that was incorrect;
             # view-once is a separate concept controlled by the isViewOnce flag.
             if raw.get("type") == "ciphertext":
                 self.log.debug(
@@ -194,9 +194,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
                         f"raised on id={id_serialized!r}: {exc}"
                     )
         except Exception as exc:
-            self.log.error(
-                f"MessageApiManager: error processing id={id_serialized!r}: {exc}"
-            )
+            self.log.error(f"MessageApiManager: error processing id={id_serialized!r}: {exc}")
 
     async def stop_bridge(self) -> None:
         """
@@ -206,10 +204,8 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         for task in (self._poll_task, self._drain_task):
             if task and not task.done():
                 task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await task
-                except asyncio.CancelledError:
-                    pass
         await self._bridge.teardown_message_bridge()
         self._bridge_active = False
         self._handlers.clear()
@@ -225,9 +221,9 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         count: int = 50,
         direction: str = "before",
         only_unread: bool = False,
-        media: Optional[str] = None,
+        media: str | None = None,
         include_calls: bool = False,
-        anchor_msg_id: Optional[str] = None,
+        anchor_msg_id: str | None = None,
     ) -> Sequence[MessageModelAPI]:
         """
         [Type: RAM]
@@ -245,7 +241,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         Returns:
             List[MessageModelAPI] — normalized, newest first.
         """
-        raw_list: List[Dict[str, Any]] = await self._bridge._evaluate_stealth(
+        raw_list: list[dict[str, Any]] = await self._bridge._evaluate_stealth(
             WAJS_Scripts.get_messages(
                 chat_id=chat_id,
                 count=count,
@@ -258,9 +254,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         )
         return [MessageModelAPI.from_dict(r) for r in (raw_list or [])]
 
-    async def fetch_messages(
-        self, chat: ChatModelAPI, **kwargs
-    ) -> Sequence[MessageModelAPI]:
+    async def fetch_messages(self, chat: ChatModelAPI, **kwargs) -> Sequence[MessageModelAPI]:
         """[Type: RAM] Fetch messages, fulfilling interface via generic storage pass."""
 
         if chat.id_serialized is None:
@@ -270,15 +264,15 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         chat_id: str = chat.id_serialized
         direction = kwargs.get("direction", "before")
         only_unread = kwargs.get("only_unread", False)
-        media = kwargs.get("media", None)
+        media = kwargs.get("media")
         include_calls = kwargs.get("include_calls", False)
-        anchor_msg_id = kwargs.get("anchor_msg_id", None)
+        anchor_msg_id = kwargs.get("anchor_msg_id")
 
         return await self.get_messages(
             chat_id, count, direction, only_unread, media, include_calls, anchor_msg_id
         )
 
-    async def get_message_by_id(self, msg_id: str) -> Optional[MessageModelAPI]:
+    async def get_message_by_id(self, msg_id: str) -> MessageModelAPI | None:
         """
         [Type: RAM]
         Fetch one message by its full serialized ID from React memory.
@@ -292,7 +286,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         if msg_id is None:
             raise ValueError("Message ID is None, cannot get message")
 
-        raw: Optional[Dict[str, Any]] = await self._bridge._evaluate_stealth(
+        raw: dict[str, Any] | None = await self._bridge._evaluate_stealth(
             WAJS_Scripts.get_message_by_id(msg_id)
         )
         if not raw:
@@ -310,7 +304,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         self,
         message: MessageModelAPI,
         save_path: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         [Type: NETWORK]
         High-level media extraction directly from the normalized MessageModelAPI object.
@@ -325,7 +319,7 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         media_type = message.msgtype or "image"
         msg_id = message.id_serialized
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "success": False,
             "type": media_type,
             "mimetype": message.mimetype,
@@ -338,18 +332,14 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         }
 
         if not message.directPath:
-            result["error"] = (
-                "Message has no directPath — not a downloadable media message."
-            )
+            result["error"] = "Message has no directPath — not a downloadable media message."
             return result
 
         if not msg_id:
             result["error"] = "no id_serialized — cannot use download_media."
             return result
 
-        js_result = await self._bridge._evaluate_stealth(
-            WAJS_Scripts.download_media(msg_id=msg_id)
-        )
+        js_result = await self._bridge._evaluate_stealth(WAJS_Scripts.download_media(msg_id=msg_id))
 
         if not js_result:
             result["error"] = "download_media returned None — media unavailable."
@@ -365,15 +355,10 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
             return result
 
         raw_bytes = base64.b64decode(b64)
-        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(save_path).write_bytes(raw_bytes)
-        self.log.info(
-            f"extract_media: [{media_type}] {len(raw_bytes):,} bytes → {save_path}"
-        )
+        await asyncio.to_thread(self._save_bytes, save_path, raw_bytes)
+        self.log.info(f"extract_media: [{media_type}] {len(raw_bytes):,} bytes → {save_path}")
 
-        result.update(
-            {"success": True, "size_bytes": len(raw_bytes), "path": save_path}
-        )
+        result.update({"success": True, "size_bytes": len(raw_bytes), "path": save_path})
         return result
 
     # ──────────────────────────────────────────────
@@ -384,11 +369,11 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         self,
         min_row_id: int,
         limit: int = 50,
-    ) -> List[MessageModelAPI]:
+    ) -> list[MessageModelAPI]:
         """
-        [Type: INDEX DB]
-        Fetch raw message data sequentially from IndexedDB storage across ALL chats directly from disk.
-        Type: RAM (Disk). Messages are retrieved in order from min_row_id onwards.
+        Fetch raw message data sequentially from IndexedDB
+        storage across ALL chats directly from disk.
+        Messages are retrieved in order from min_row_id onwards.
         """
         raw_list = await self._bridge._evaluate_stealth(
             WAJS_Scripts.indexdb_get_messages(min_row_id=min_row_id, limit=limit)
@@ -399,12 +384,14 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
     # NETWORK BASED METHODS
     # ──────────────────────────────────────────────
 
-    async def send_text_message(self, chat_id: str, message: str) -> Any:
+    async def send_text_message(
+        self, chat_id: str, message: str, options: dict | None = None
+    ) -> Any:
         """
         [Type: NETWORK]
         Pure API text send. Sends the message entirely over the network.
         Use only when Playwright UI interaction logic is bypassing the actual input field.
         """
         return await self._bridge._evaluate_stealth(
-            WAJS_Scripts.send_text_message(chat_id, message)
+            WAJS_Scripts.send_text_message(chat_id, message, options=options)
         )

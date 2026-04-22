@@ -7,13 +7,14 @@ import logging
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from playwright.async_api import Locator, Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_whatsapp.exceptions import WhatsAppInteractionError
 from camouchat_whatsapp.features.interaction_controller import (
     InteractionController as HumanInteractionController,
 )
-from playwright.async_api import Locator, Page
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 # ============================================================================
 # FIXTURES
@@ -41,9 +42,7 @@ def mock_ui_config():
 
 @pytest.fixture
 def humanize_fixture(mock_page, mock_logger, mock_ui_config):
-    with patch(
-        "camouchat_whatsapp.features.interaction_controller.pyperclip"
-    ) as mock_clip:
+    with patch("camouchat_whatsapp.features.interaction_controller.pyperclip") as mock_clip:
         humanize = HumanInteractionController(
             page=mock_page, log=mock_logger, ui_config=mock_ui_config
         )
@@ -121,9 +120,7 @@ async def test_instant_fill_success(humanize_fixture):
     humanize, _ = humanize_fixture
     mock_source = AsyncMock(spec=Locator)
 
-    result = await humanize._Instant_fill(
-        text="failover", source=mock_source, send=True
-    )
+    result = await humanize._Instant_fill(text="failover", source=mock_source, send=True)
 
     assert result is True
     mock_source.fill.assert_called_with("failover")
@@ -143,9 +140,24 @@ async def test_instant_fill_failure(humanize_fixture):
 
 
 @pytest.mark.asyncio
-async def test_typing_no_source(humanize_fixture):
-    """Test typing raises error if source is None and message_box is not found."""
+async def test_interaction_controller_focus_input(humanize_fixture):
     humanize, _ = humanize_fixture
-    humanize.ui_config.message_box.return_value = None
-    with pytest.raises(WhatsAppInteractionError):
-        await humanize.type_text(text="test", source=None)
+    mock_source = AsyncMock(spec=Locator)
+    await humanize.focus_input(source=mock_source)
+    mock_source.click.assert_called_once_with(timeout=5000)
+
+
+@pytest.mark.asyncio
+async def test_interaction_controller_clear_input(humanize_fixture):
+    humanize, _ = humanize_fixture
+    mock_source = AsyncMock(spec=Locator)
+    await humanize.clear_input(source=mock_source)
+    mock_source.press.assert_any_call("Control+A")
+    mock_source.press.assert_any_call("Backspace")
+
+
+@pytest.mark.asyncio
+async def test_interaction_controller_enter(humanize_fixture):
+    humanize, _ = humanize_fixture
+    await humanize.enter()
+    humanize.page.keyboard.press.assert_called_with("Enter")

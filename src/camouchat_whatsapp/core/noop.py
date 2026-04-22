@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from typing import Sequence, List, Dict, Any
+from collections.abc import Sequence
+from typing import Any
+
+from camouchat_core import MessageProtocol, StorageProtocol
 
 from camouchat_whatsapp.filters import MessageFilter
-from camouchat_core import MessageProtocol, StorageProtocol
 
 
 # -----------------------------
@@ -44,9 +46,7 @@ class NoOpStorage(StorageProtocol):
     async def enqueue_insert(self, msgs: Sequence[MessageProtocol], **kwargs) -> None:
         return None
 
-    async def _insert_batch_internally(
-        self, msgs: Sequence[MessageProtocol], **kwargs
-    ) -> None:
+    async def _insert_batch_internally(self, msgs: Sequence[MessageProtocol], **kwargs) -> None:
         return None
 
     def check_message_if_exists(self, msg_id: str, **kwargs) -> bool:
@@ -55,7 +55,7 @@ class NoOpStorage(StorageProtocol):
     async def check_message_if_exists_async(self, msg_id: str, **kwargs) -> bool:
         return False
 
-    def get_all_messages(self, **kwargs) -> List[Dict[str, Any]]:
+    def get_all_messages(self, **kwargs) -> list[dict[str, Any]]:
         return []
 
     async def close_db(self, **kwargs) -> None:

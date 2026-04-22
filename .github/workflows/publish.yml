@@ -1,0 +1,52 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-testpypi:
+    if: github.event.release.prerelease == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v1
+      - uses: actions/setup-python@v4
+        with:
+          python-version-file: "pyproject.toml"
+
+      - run: |
+          uv add "camouchat-core @ git+https://github.com/CamouChat-Team/camouchat-core@main"
+          uv add "camouchat-browser @ git+https://github.com/CamouChat-Team/camouchat-browser@main"
+
+      - run: uv build --package camouchat-whatsapp
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+
+  publish-pypi:
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    environment: pypi
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v1
+      - uses: actions/setup-python@v4
+        with:
+          python-version-file: "pyproject.toml"
+
+      - run: |
+          uv add "camouchat-core @ git+https://github.com/CamouChat-Team/camouchat-core@main"
+          uv add "camouchat-browser @ git+https://github.com/CamouChat-Team/camouchat-browser@main"
+
+      - run: uv build --package camouchat-whatsapp
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

@@ -1,10 +1,7 @@
-from typing import Optional, Union
 from camouchat_core import LoggerFactory
 
 
-def get_whatsapp_logger(
-    name: str, profile_id: str = "GLOBAL", level: Optional[Union[int, str]] = None
-):
+def get_whatsapp_logger(name: str, profile_id: str = "GLOBAL", level: int | str | None = None):
     """Returns a logger specialized for WhatsApp operations."""
     return LoggerFactory.get_logger(
         name=name, platform="WHATSAPP", profile_id=profile_id, level=level

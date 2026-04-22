@@ -1,10 +1,3 @@
-"""
-Utility decorators for camouchat operations.
+from .msg_event_hook import RegistryConfig, on_newMsg
 
-Provides reusable decorators for common patterns like
-ensuring UI state, retry logic, and operation guards.
-"""
-
-from .msg_event_hook import on_newMsg
-
-__all__ = ["on_newMsg"]
+__all__ = ["RegistryConfig", "on_newMsg"]

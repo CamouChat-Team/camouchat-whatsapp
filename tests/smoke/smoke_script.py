@@ -16,16 +16,16 @@ import asyncio
 import json
 import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from camouchat_browser import (
     BrowserConfig,
-    BrowserForge,
-    ProfileManager,
     CamoufoxBrowser,
+    ProfileManager,
 )
 from camouchat_core import Platform
-from camouchat_whatsapp import Login, WebSelectorConfig, WapiWrapper
+
+from camouchat_whatsapp import Login, WapiWrapper
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIG — Fill these in.  No personal data is committed; use your own values.
@@ -44,13 +44,13 @@ CFG = {
     "media_chat_id": None,
     # Group name to auto-resolve as the media test chat (RAM lookup, zero network).
     # Only used when media_chat_id is None.
-    "media_group_name": "YOUR_GROUP_NAME",
+    "media_group_name": "",
     # Directory where extracted media files will be saved.
     "media_save_dir": "/tmp/camouchat_media",
     # Newsletter search query for test_newsletter_search.
     "newsletter_search_query": "technology",
     # CamouChat profile ID (matches the profile used in production).
-    "profile_id": "Work",
+    "profile_id": "work",
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -60,7 +60,7 @@ CFG = {
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-async def test_isolation(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_isolation(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Stealth isolation — verify WPP handle survives 'window.WPP' annihilation.
     Confirms the hidden property bridge works and stealth engine is active.
@@ -69,7 +69,7 @@ async def test_isolation(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(f"  Stealth bridge OK — chat dump ({len(chat)} fields).")
 
 
-async def test_messages_basic(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_messages_basic(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch last 5 messages from MY_NUMBER chat (RAM read).
     Prints direction, type, body snippet, and full MsgModel dump of first message.
@@ -78,15 +78,13 @@ async def test_messages_basic(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(f"  Fetched {len(msgs)} message(s).")
     for m in msgs:
         direction = "→ Me" if m.get("fromMe") else "← Them"
-        print(
-            f"  [{direction}] [{m.get('type')}] {m.get('body','')[:60]!r}  (ts={m.get('t')})"
-        )
+        print(f"  [{direction}] [{m.get('type')}] {m.get('body', '')[:60]!r}  (ts={m.get('t')})")
     if msgs:
         print("\n  Full MsgModel dump of first message:")
         print(json.dumps(msgs[0], indent=4, default=str))
 
 
-async def test_messages_unread(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_messages_unread(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch only unread messages from MY_NUMBER chat (count=-1 = all unread).
     """
@@ -94,7 +92,7 @@ async def test_messages_unread(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(f"  {len(unread)} unread message(s) in this chat.")
 
 
-async def test_messages_paginate(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_messages_paginate(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Pagination: fetch the 3 messages BEFORE the latest one (anchor-based).
     """
@@ -109,10 +107,10 @@ async def test_messages_paginate(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None
     )
     print(f"  Got {len(page_msgs)} messages before anchor:")
     for m in page_msgs:
-        print(f"    [{m.get('type')}] {m.get('body','')[:60]!r}")
+        print(f"    [{m.get('type')}] {m.get('body', '')[:60]!r}")
 
 
-async def test_message_by_id(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_message_by_id(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch a single message by its full serialized ID (get_message_by_id).
     """
@@ -130,7 +128,7 @@ async def test_message_by_id(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(json.dumps(single, indent=4, default=str))
 
 
-async def test_chat_list(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_chat_list(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch top 5 chats from the sidebar (RAM read).
     Prints full raw ChatModel dump of the first result.
@@ -141,7 +139,7 @@ async def test_chat_list(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
         print(json.dumps(chat_list[0], indent=4, default=str))
 
 
-async def test_chat_list_unread(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_chat_list_unread(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch only chats that have unread messages.
     """
@@ -152,7 +150,7 @@ async def test_chat_list_unread(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
         print(json.dumps(unread_chats[0], indent=4, default=str))
 
 
-async def test_get_chat(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_get_chat(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch the full raw ChatModel dict for a single chat (my_number).
     Purpose: inspect every field so you can build ChatModelAPI.from_dict().
@@ -163,7 +161,7 @@ async def test_get_chat(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(json.dumps(chat, indent=4, default=str))
 
 
-async def test_indexdb(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_indexdb(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Read 5 messages from IndexedDB (disk history) using a rowId anchor from RAM.
     Zero network operation — reads from browser's persistent disk store.
@@ -183,7 +181,7 @@ async def test_indexdb(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
         print(json.dumps(disk_msgs[0], indent=4, default=str))
 
 
-async def test_newsletter_list(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_newsletter_list(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     List all WhatsApp Channels (Newsletters) you follow.
     """
@@ -196,7 +194,7 @@ async def test_newsletter_list(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
         print("  (Not following any channels)")
 
 
-async def test_newsletter_search(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_newsletter_search(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Search the WhatsApp Channel directory (NETWORK call).
     Query is configurable via CFG['newsletter_search_query'].
@@ -207,7 +205,7 @@ async def test_newsletter_search(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None
     print(json.dumps(results, indent=4, default=str))
 
 
-async def test_conn_session(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_conn_session(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Read session & device info from ConnModel (RAM).
     user_id, lid, platform, theme, online status, multi-device flag.
@@ -223,11 +221,12 @@ async def test_conn_session(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(f"  user_id={user_id}  lid={user_lid}")
     print(f"  platform={platform}  theme={theme}")
     print(
-        f"  online={is_online}  ready={is_ready}  multi_device={is_multi}  needs_update={needs_update}"
+        f"  online={is_online}  ready={is_ready}  "
+        f"multi_device={is_multi}  needs_update={needs_update}"
     )
 
 
-async def test_conn_build(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_conn_build(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Read WA Web build constants & version info (RAM).
     VERSION_BASE, PUSH_PHASE, etc.
@@ -237,7 +236,7 @@ async def test_conn_build(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(json.dumps(build, indent=4, default=str))
 
 
-async def test_conn_stream(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_conn_stream(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Read the current stream mode & info (RAM).
     {mode: "MAIN", info: "NORMAL"} in a healthy session.
@@ -246,7 +245,7 @@ async def test_conn_stream(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(json.dumps(stream, indent=4, default=str))
 
 
-async def test_contact_get(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_contact_get(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch a contact by ID and list the first 5 contacts (RAM reads).
     contact_id defaults to my_number which returns {} (own number not in ContactStore).
@@ -263,7 +262,7 @@ async def test_contact_get(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
         print(json.dumps(all_contacts[0], indent=4, default=str))
 
 
-async def test_contact_query(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_contact_query(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Query if a contact exists, their profile picture URL, and about/status text.
     NETWORK: profilePicUrl and status queries may hit XMPP.
@@ -278,24 +277,40 @@ async def test_contact_query(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(f"  about/status: {about}")
 
 
-async def test_group_list(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_group_list(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch all groups you're a member of (RAM read).
     Prints count and full raw ChatModel dump of the first group.
     """
-    groups = await wapi.group_get_all()
+    try:
+        groups = await wapi.group_get_all()
+    except Exception as exc:
+        if "g is undefined" in str(exc):
+            print(
+                "  ⚠  ChatStore has null skeleton entries — WA Web is still syncing "
+                "group metadata. Wait ~10-30s after login and re-run."
+            )
+        raise
     print(f"  Total groups: {len(groups)}")
     if groups:
         print("  First group raw dump:")
         print(json.dumps(groups[0], indent=4, default=str))
 
 
-async def test_group_details(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_group_details(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Admin check, invite code fetch (if admin), and global size limit (RAM).
     Invite code fetch is skipped automatically if not admin.
     """
-    groups = await wapi.group_get_all()
+    try:
+        groups = await wapi.group_get_all()
+    except Exception as exc:
+        if "g is undefined" in str(exc):
+            print(
+                "  ⚠  ChatStore has null skeleton entries — WA Web is still syncing "
+                "group metadata. Wait ~10-30s after login and re-run."
+            )
+        raise
     if not groups:
         print("  No groups found.")
         return
@@ -316,7 +331,7 @@ async def test_group_details(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(f"  Group size limit: {size_limit}")
 
 
-async def test_blocklist(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_blocklist(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     List all blocked contacts and check if CONTACT_ID is blocked (RAM reads).
     """
@@ -329,7 +344,7 @@ async def test_blocklist(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(f"  Is {cid} blocked? {is_blocked}")
 
 
-async def test_profile(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_profile(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Read own profile: name (RAM).
     Note: about/picture/isBusiness hang on XMPP and are skipped (On hold).
@@ -339,7 +354,7 @@ async def test_profile(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print("  [On hold → Fails] Skipped: about, picture, isBusiness (Hangs XMPP)")
 
 
-async def test_privacy(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_privacy(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Read all privacy settings (RAM read).
     readReceipts, groupAdd, profilePicture, lastSeen, online, etc.
@@ -348,7 +363,7 @@ async def test_privacy(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(json.dumps(privacy, indent=4, default=str))
 
 
-async def test_labels(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_labels(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Fetch all chat labels (RAM read).
     Only populated on WhatsApp Business accounts.
@@ -359,12 +374,20 @@ async def test_labels(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(json.dumps(labels, indent=4, default=str))
 
 
-async def test_community(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_community(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Find a Community parent group and list its subgroups + announcement group.
     Skipped automatically if no community parent exists in your chats.
     """
-    groups = await wapi.group_get_all()
+    try:
+        groups = await wapi.group_get_all()
+    except Exception as exc:
+        if "g is undefined" in str(exc):
+            print(
+                "  ⚠  ChatStore has null skeleton entries — WA Web is still syncing "
+                "group metadata. Wait ~10-30s after login and re-run."
+            )
+        raise
     parent = next(
         (g for g in groups if g.get("isParentGroup") or g.get("__x_isParentGroup")),
         None,
@@ -383,7 +406,7 @@ async def test_community(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print(f"  Announcement group: {ann}")
 
 
-async def test_status(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_status(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     [On hold → Fails] Status/stories fetch hangs the XMPP bridge.
     Kept as a placeholder for when the underlying WPP api is fixed.
@@ -394,7 +417,7 @@ async def test_status(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     print("  Uncomment when WPP fixes the underlying promise resolution.")
 
 
-async def test_media_extract(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
+async def test_media_extract(wapi: WapiWrapper, cfg: dict[str, Any]) -> None:
     """
     Extract and decrypt the most recent image/video from MEDIA_CHAT_ID.
 
@@ -414,20 +437,25 @@ async def test_media_extract(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
     media_id = cfg.get("media_chat_id")
     if not media_id:
         group_name = cfg.get("media_group_name", "")
-        all_groups = await wapi.group_get_all()
+        try:
+            all_groups = await wapi.group_get_all()
+        except Exception as exc:
+            if "g is undefined" in str(exc):
+                print(
+                    "  ⚠  ChatStore has null skeleton entries — WA Web is still syncing "
+                    "group metadata. Wait ~10-30s after login and re-run."
+                )
+            raise
         media_group = next(
             (
                 g
                 for g in all_groups
-                if g.get("__x_name") == group_name
-                or g.get("__x_formattedTitle") == group_name
+                if g.get("__x_name") == group_name or g.get("__x_formattedTitle") == group_name
             ),
             None,
         )
         if not media_group:
-            print(
-                f"  Group '{group_name}' not found. Set CFG['media_chat_id'] directly."
-            )
+            print(f"  Group '{group_name}' not found. Set CFG['media_chat_id'] directly.")
             return
         media_id = media_group["id_serialized"]
         print(f"  Auto-resolved media chat: {media_id} (group '{group_name}')")
@@ -446,9 +474,7 @@ async def test_media_extract(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
 
     print(f"  Found {len(all_msgs)} message(s) total, {len(media_msgs)} with media.")
     if not media_msgs:
-        print(
-            "  No extractable media found. Send a regular image to this chat and re-run."
-        )
+        print("  No extractable media found. Send a regular image to this chat and re-run.")
         return
 
     target = media_msgs[0]
@@ -459,9 +485,7 @@ async def test_media_extract(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
         fallback = " [CDN fallback used]" if result["used_fallback"] else " [Cache api]"
         print(f"  ✅ SUCCESS{fallback}")
         print(f"     type={result['type']}  mimetype={result['mimetype']}")
-        print(
-            f"     size={result['size_bytes']:,} bytes  viewOnce={result['view_once']}"
-        )
+        print(f"     size={result['size_bytes']:,} bytes  viewOnce={result['view_once']}")
         print(f"     saved → {result['path']}")
     else:
         print(f"  ❌ FAILED: {result['error']}")
@@ -474,8 +498,8 @@ async def test_media_extract(wapi: WapiWrapper, cfg: Dict[str, Any]) -> None:
 #   on_hold=False → expected to pass normally
 # ══════════════════════════════════════════════════════════════════════════════
 
-REGISTRY: Dict[str, tuple] = {
-    #  name                      function                   description                              on_hold
+REGISTRY: dict[str, tuple] = {
+    #  name                      function                   description              on_hold
     "test_isolation": (test_isolation, "Stealth bridge isolation check", False),
     "test_messages_basic": (test_messages_basic, "Last 5 messages (RAM)", False),
     "test_messages_unread": (test_messages_unread, "Unread messages fetch", False),
@@ -529,7 +553,7 @@ REGISTRY: Dict[str, tuple] = {
 # Or specify test names (exact or prefix): ["test_conn", "test_messages_basic"]
 # ══════════════════════════════════════════════════════════════════════════════
 
-TESTS_TO_RUN: List[str] = []
+TESTS_TO_RUN: list[str] = []
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -537,7 +561,7 @@ TESTS_TO_RUN: List[str] = []
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _resolve_tests(requested: List[str]) -> List[str]:
+def _resolve_tests(requested: list[str]) -> list[str]:
     """Resolve test names, supporting prefix matching."""
     if not requested:
         return list(REGISTRY.keys())
@@ -553,12 +577,12 @@ def _resolve_tests(requested: List[str]) -> List[str]:
     return resolved
 
 
-async def run_tests(wapi: WapiWrapper, test_names: List[str]) -> None:
+async def run_tests(wapi: WapiWrapper, test_names: list[str]) -> None:
     total = len(test_names)
     passed = 0
     failed = 0
     on_hold = 0
-    results: List[Tuple[str, str, float, Optional[str]]] = []
+    results: list[tuple[str, str, float, str | None]] = []
 
     print("\n" + "═" * 60)
     print(f"  CamouChat WA-JS Smoke Tests  ({total} selected)")
@@ -572,9 +596,7 @@ async def run_tests(wapi: WapiWrapper, test_names: List[str]) -> None:
         print("  " + "─" * 50)
         if is_on_hold:
             print("  Skipping — marked [ON HOLD]: known to hang or fail.")
-            print(
-                "  Pass --force-on-hold flag or call this test directly to run anyway."
-            )
+            print("  Pass --force-on-hold flag or call this test directly to run anyway.")
             on_hold += 1
             results.append((name, "ON_HOLD", 0.0, None))
             continue
@@ -593,9 +615,7 @@ async def run_tests(wapi: WapiWrapper, test_names: List[str]) -> None:
 
     # ── Summary ────────────────────────────────────────────────────────────────
     print("\n" + "═" * 60)
-    print(
-        f"  {passed} PASSED  |  {failed} FAILED  |  {on_hold} ON HOLD  ({total} total)"
-    )
+    print(f"  {passed} PASSED  |  {failed} FAILED  |  {on_hold} ON HOLD  ({total} total)")
     print("═" * 60)
     if failed:
         print("\nFailed tests:")
@@ -630,9 +650,7 @@ async def main() -> None:
         print("  Usage:")
         print("    uv run tests/smoke_script.py                        # run all")
         print("    uv run tests/smoke_script.py test_conn_session       # one test")
-        print(
-            "    uv run tests/smoke_script.py test_conn test_privacy  # multiple / prefix"
-        )
+        print("    uv run tests/smoke_script.py test_conn test_privacy  # multiple / prefix")
         print("    uv run tests/smoke_script.py --list                  # this screen")
         print()
         return
@@ -654,18 +672,13 @@ async def main() -> None:
     config = BrowserConfig.from_dict(
         {
             "platform": Platform.WHATSAPP,
-            "locale": "en-US",
-            "enable_cache": False,
             "headless": False,
-            "geoip": False,  # skip MaxMind MMDB download (avoids GitHub rate-limit)
-            "fingerprint_obj": BrowserForge(),
         }
     )
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
 
-    ui = WebSelectorConfig(page=page)
-    login = Login(page=page, UIConfig=ui)
+    login = Login(page=page)
     await login.login(method=0)
 
     wapi = WapiWrapper(page=page)

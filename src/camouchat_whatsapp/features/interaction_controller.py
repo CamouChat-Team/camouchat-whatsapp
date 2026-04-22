@@ -8,15 +8,17 @@ import random
 import tempfile
 import weakref
 from logging import Logger, LoggerAdapter
-from typing import Union, Optional, Any
+from typing import Any
 
 import pyperclip
 from camouchat_core import InteractionControllerProtocol
 from filelock import FileLock
-from playwright.async_api import Page, ElementHandle, Locator
+from playwright.async_api import ElementHandle, Locator, Page
+from playwright.async_api import (
+    Error as PlaywrightError,
+)
 from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
-    Error as PlaywrightError,
 )
 
 from camouchat_whatsapp.api import WapiSession
@@ -36,52 +38,69 @@ _clipboard_file_lock = FileLock(_lock_file_path)
 class InteractionController(InteractionControllerProtocol):
     """Enables replying to specific WhatsApp messages."""
 
-    _instances: weakref.WeakKeyDictionary[Page, InteractionController] = (
-        weakref.WeakKeyDictionary()
-    )
+    _instances: weakref.WeakKeyDictionary[Page, InteractionController] = weakref.WeakKeyDictionary()
     _initialized: bool = False
 
     def __new__(cls, *args, **kwargs) -> InteractionController:
         page = kwargs.get("page") or (args[0] if args else None)
         if page is None:
-            return super(InteractionController, cls).__new__(cls)
+            return super().__new__(cls)
         if page not in cls._instances:
-            instance = super(InteractionController, cls).__new__(cls)
+            instance = super().__new__(cls)
             cls._instances[page] = instance
         return cls._instances[page]
 
     def __init__(
         self,
         page: Page,
-        ui_config: WebSelectorConfig,
-        log: Optional[Union[LoggerAdapter, Logger]] = None,
-        wapi: Optional[WapiSession] = None,
+        ui_config: WebSelectorConfig | None = None,
+        log: LoggerAdapter | Logger | None = None,
+        wapi: WapiSession | None = None,
     ) -> None:
         if hasattr(self, "_initialized") and self._initialized:
             return
-        self.page = page
-        self.ui_config = ui_config
-        self.log = log or w_logger
-        if self.page is None:
+        if page is None:
             raise ValueError("page must not be None")
-        self._wapi: Optional[WapiSession] = wapi
+        self.page = page
+        self.ui_config = ui_config or WebSelectorConfig(page=page)
+        self.log = log or w_logger
+        self._wapi: WapiSession | None = wapi
         self._initialized = True
 
     # ----------------------------------------------------
     # Humanize func
     async def send_api_text(
-        self, text: str, chat_id: str, quoted_msg_id: Optional[str] = None
+        self,
+        text: str,
+        chat_id: str,
+        quoted_msg_id: str | None = None,
+        mentionList: list[str] | None = None,
     ) -> bool:
         """
         Skips native OS usage & Directly send text via RAM Func.
         Initially supported for direct text msg sending only & works for Quoted Replies also.
         Don't support to send text with Media or other attachments.
 
-        Gives Telemetry : mouse moves , msg box click & focus , for txt len > 50 chars , add ctrl C & ctrl V telemetry.
+        Gives Telemetry : mouse moves , msg box click & focus.
+        For txt len > 50 chars , add ctrl C & ctrl V telemetry.
         Args :
             text : Text to be sent
             chat_id: Target chat ID
             quoted_msg_id: Optional message ID to quote/reply to
+                            it auto adds the quote via UI no need for physical interference.
+            mentionList: Optional list of message IDs to mention
+                        Pass a list of JIDs: e.g. ['97xxxxxxxx@c.us']
+                        example = mentionList = ['97xxxxxxxx@c.us', '99xxxxxxxx@c.us']
+
+
+            --------------------------------------------------------------------------------------------
+            IMPORTANT : Make sure the id passed in the quoted_msg_id or mentionList
+                        Must be correct.
+                        Always double check it.
+                        It does not give any Error at back but raises
+                        functionally sus that id was not valid.
+            --------------------------------------------------------------------------------------------
+
         Returns:
             bool: True if text is sent successfully.
         """
@@ -95,9 +114,7 @@ class InteractionController(InteractionControllerProtocol):
             self.log.debug("Msg Box Clicked.")
 
             if not chat_id:
-                raise WhatsAppInteractionError(
-                    "Could not determine active chat ID from bridge."
-                )
+                raise WhatsAppInteractionError("Could not determine active chat ID from bridge.")
 
             # typing state
             if await bridge.mark_is_composing(chat_id=chat_id):
@@ -118,11 +135,11 @@ class InteractionController(InteractionControllerProtocol):
             options: dict[str, Any] = {"waitForAck": False}
             if quoted_msg_id:
                 options["quotedMsg"] = quoted_msg_id
+            if mentionList:
+                options["mentionedJidList"] = mentionList
 
             self.log.debug("Invoking bridge.send_text_message...")
-            success = await bridge.send_text_message(
-                chat_id=chat_id, message=text, options=options
-            )
+            success = await bridge.send_text_message(chat_id=chat_id, message=text, options=options)
             if success:
                 self.log.debug("Text Sent via RAM Func.")
             else:
@@ -137,7 +154,7 @@ class InteractionController(InteractionControllerProtocol):
     async def send_text(
         self,
         message: MessageModelAPI,
-        text: Optional[str],
+        text: str | None,
         quote: bool = False,
         send: bool = False,
     ) -> bool:
@@ -155,9 +172,7 @@ class InteractionController(InteractionControllerProtocol):
             return success
 
         except PlaywrightTimeoutError as e:
-            raise WhatsAppInteractionError(
-                "reply timed out while preparing input box"
-            ) from e
+            raise WhatsAppInteractionError("reply timed out while preparing input box") from e
 
     async def quote(self, message: MessageModelAPI) -> bool:
         """Double-click the message container's side padding to trigger reply."""
@@ -254,9 +269,7 @@ class InteractionController(InteractionControllerProtocol):
                     if len(line) > 50:
                         await self._safe_clipboard_paste(line)
                     else:
-                        await self.page.keyboard.type(
-                            text=line, delay=random.randint(80, 100)
-                        )
+                        await self.page.keyboard.type(text=line, delay=random.randint(80, 100))
 
                     if i < len(lines) - 1:
                         await self.page.keyboard.press("Shift+Enter")
@@ -268,22 +281,18 @@ class InteractionController(InteractionControllerProtocol):
 
         except (PlaywrightTimeoutError, PlaywrightError) as e:
             self.log.debug("Typing failed → fallback to instant fill", exc_info=e)
-            return await self._Instant_fill(
-                text=text, source=target or source, send=send
-            )
+            return await self._Instant_fill(text=text, source=target or source, send=send)
 
     async def enter(self, **kwargs) -> None:
         """
         Presses Enter on the page, use it for confirm send after type.
         Given separately for Media based sending.
-        For Media to be sent with text, you should follow first typing text, add_media now auto adds the text to the media's caption , now enter via page.
+        For Media with text: type text first, add_media (auto-captions), then enter.
         :return:
         """
         await self.page.keyboard.press("Enter")
 
-    async def clear_input(
-        self, source: ElementHandle | Locator | None = None, **kwargs
-    ) -> None:
+    async def clear_input(self, source: ElementHandle | Locator | None = None, **kwargs) -> None:
         """Clear the WhatsApp message input or a provided input target."""
         target = source or self.ui_config.message_box()
         if not target:
@@ -298,9 +307,7 @@ class InteractionController(InteractionControllerProtocol):
 
     def _message_container_locator(self, data_id: str) -> Locator:
         """Return the outer WhatsApp message wrapper by data-id only."""
-        base_data_id = (
-            "_".join(data_id.split("_")[:3]) if data_id.count("_") >= 2 else data_id
-        )
+        base_data_id = "_".join(data_id.split("_")[:3]) if data_id.count("_") >= 2 else data_id
         escaped_data_id = self._css_attr_value(data_id)
         escaped_base_data_id = self._css_attr_value(base_data_id)
 
@@ -349,10 +356,7 @@ class InteractionController(InteractionControllerProtocol):
 
         return data_id.startswith("true_")
 
-    async def _ensure_clean_input(
-        self, source: Union[ElementHandle, Locator], retries: int = 3
-    ) -> None:
-
+    async def _ensure_clean_input(self, source: ElementHandle | Locator, retries: int = 3) -> None:
         for attempt in range(1, retries + 1):
             try:
                 text = await source.inner_text()
@@ -366,7 +370,7 @@ class InteractionController(InteractionControllerProtocol):
 
                 return
 
-            except PlaywrightTimeoutError, PlaywrightError:
+            except (PlaywrightTimeoutError, PlaywrightError):
                 if attempt < retries:
                     await asyncio.sleep(0.2 * attempt)
                 else:
@@ -376,7 +380,7 @@ class InteractionController(InteractionControllerProtocol):
     async def _Instant_fill(
         self,
         text: str,
-        source: Optional[Union[ElementHandle, Locator]],
+        source: ElementHandle | Locator | None,
         send: bool = False,
     ) -> bool:
         """Fallback to instant fill when typing fails."""
@@ -402,7 +406,7 @@ class InteractionController(InteractionControllerProtocol):
         """
 
         loop = asyncio.get_running_loop()
-        previous_clipboard: Optional[str] = None
+        previous_clipboard: str | None = None
         async with _clipboard_async_lock:
             await loop.run_in_executor(None, _clipboard_file_lock.acquire)
 

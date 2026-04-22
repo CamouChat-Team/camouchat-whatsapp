@@ -10,36 +10,41 @@ Manages the authentication flow for WhatsApp Web.
 - Polls until the session is fully authenticated before allowing further operations.
 
 ```python
-from camouchat_whatsapp import Login
+from camouchat_whatsapp import Login, WebSelectorConfig
 
-login = Login(page=page, config=web_ui_config)
-await login.wait_for_login()
+ui = WebSelectorConfig(page=page)
+login = Login(page=page, UIConfig=ui)
+await login.login(method=0)  # method=0: auto-handles saved session or QR
 ```
 
 ## `WebSelectorConfig`
 A configuration object that defines CSS selectors and timeouts for the WhatsApp Web UI. Allows customizing behavior for different locale versions or future UI changes without touching business logic.
 
 ## `InteractionController`
-Provides humanized high-level actions:
+Provides both API-level and humanized browser-level message actions:
 
-- **`send_message(chat_id, text)`**: Sends a plain text message.
-- **`reply_message(chat_id, message_id, text)`**: Sends a quoted reply.
-- **`send_mention(chat_id, text, participants)`**: Sends a message with `@mentions`.
-- **`send_link_preview(chat_id, url, text)`**: Sends a message with a rich link preview.
+- **`send_api_text(chat_id, text, quoted_msg_id=None, mention_list=None)`**: Sends a plain-text message via the internal WA-JS API (zero DOM interaction, stealth-native). Pass `mention_list=["919876543210@c.us"]` to tag contacts.
 
-All methods introduce natural timing delays to mimic human behavior.
+  > ⚠️ **mention_list must be exact.** Every JID in `mention_list` must also appear as `@number` in the message `text`. WhatsApp's backend cross-validates the mention payload against the message body — a mismatch (e.g. mentioning a JID not present in the text, or vice versa) creates a suspicious signal that can flag the session. Always keep `mention_list` and `@mentions` in the text in sync.
+
+- **`send_text(message, text, quote=False, send=True)`**: Types text into the WhatsApp Web input field using humanized keyboard simulation. Optionally triggers a quote bubble and sends.
+- **`open_chat(chat)`**: Navigates the browser to a specific chat. Skips newsletter/channel JIDs (`"@newsletter"`).
 
 ## `MediaController`
-Handles media workflows:
+Handles media workflows via the WA-JS CDN bridge:
 
-- **`download_media(message)`**: Downloads media from a message using WA-JS's internal CDN bridge (stealthy, no direct CDN calls).
-- **`save_media(media_bytes, media_type, profile)`**: Persists downloaded media to the profile's media directory.
-- **`MediaType`** / **`FileTyped`**: Enums for classifying media category and buffer format.
+- **`save_media(message)`**: Downloads media from a `MessageModelAPI` object using the local-first WPP CDN bridge and saves it to the profile's media directory. Returns the saved file path or `None`.
+- **`add_media(mtype, file, force=False)`**: Uploads a `FileTyped` object to the currently open WhatsApp chat via the file picker automation. `force=True` skips the chat-open check.
 
 ```python
-from camouchat_whatsapp import MediaController, MediaType
+from camouchat_whatsapp import MediaController, MediaType, FileTyped
 
-ctrl = MediaController(page=page, profile=profile)
-media = await ctrl.download_media(message=msg)
-await ctrl.save_media(media, MediaType.IMAGE, profile=profile)
+ctrl = MediaController(page=page, UIConfig=ui, wapi=wapi, profile=profile)
+
+# Download and save incoming media
+saved_path = await ctrl.save_media(message=msg)
+
+# Re-upload to chat
+file_obj = FileTyped(uri=saved_path, name="file.jpg", mime_type=msg.mimetype)
+await ctrl.add_media(mtype=MediaType.IMAGE, file=file_obj, force=True)
 ```

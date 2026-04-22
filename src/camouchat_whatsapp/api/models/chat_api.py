@@ -172,18 +172,14 @@ class ChatModelAPI(ChatProtocol):
             lines.append(f"  labels      : {', '.join(self.labels)}")
 
         if self.ephemeralDuration or self.disappearingModeTrigger:
-            dur = (
-                f" duration={self.ephemeralDuration}s" if self.ephemeralDuration else ""
-            )
+            dur = f" duration={self.ephemeralDuration}s" if self.ephemeralDuration else ""
             init = (
                 f" initiator={self.disappearingModeInitiator}"
                 if self.disappearingModeInitiator
                 else ""
             )
             trig = (
-                f" trigger={self.disappearingModeTrigger}"
-                if self.disappearingModeTrigger
-                else ""
+                f" trigger={self.disappearingModeTrigger}" if self.disappearingModeTrigger else ""
             )
             lines.append(f"  ephemeral   :{dur}{init}{trig}")
 

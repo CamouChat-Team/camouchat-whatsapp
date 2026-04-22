@@ -6,12 +6,13 @@ Shows ProfileManager integration and MessageProcessor compatibility.
 
 import asyncio
 import logging
+import os
 import sys
-from pathlib import Path
 
 import pytest
-from camouchat_whatsapp.storage.sqlalchemy_storage import SQLAlchemyStorage
 from camouchat_browser import ProfileManager
+
+from camouchat_whatsapp.storage.sqlalchemy_storage import SQLAlchemyStorage
 
 # Configure logging
 logging.basicConfig(
@@ -50,9 +51,10 @@ async def test_basic_operations():
     # Create storage with temporary database
     queue = asyncio.Queue()
     storage = SQLAlchemyStorage(
+        profile=None,  # type: ignore
         queue=queue,
         log=log,
-        database_url="sqlite+aiosqlite:///test_messages.db",
+        db_credentials={"storage_type": "sqlite", "database_path": "test_messages.db"},
         batch_size=5,
         flush_interval=1.0,
     )
@@ -60,8 +62,7 @@ async def test_basic_operations():
     async with storage:
         # Create test messages
         messages = [
-            MockMessage(f"msg_{i}", f"Hello {i}", i % 2 != 0, "TestChat")
-            for i in range(10)
+            MockMessage(f"msg_{i}", f"Hello {i}", i % 2 != 0, "TestChat") for i in range(10)
         ]
 
         print(f"\n📝 Enqueueing {len(messages)} messages...")
@@ -82,9 +83,7 @@ async def test_basic_operations():
         all_msgs = await storage.get_all_messages_async(limit=10)
         print(f"  Found {len(all_msgs)} messages")
         for msg in all_msgs[:3]:
-            print(
-                f"    - {msg['id_serialized']}: {msg['body'][:30]} (fromMe={msg['fromMe']})"
-            )
+            print(f"    - {msg['id_serialized']}: {msg['body'][:30]} (fromMe={msg['fromMe']})")
 
         # Query by chat
         print("\n💬 Querying messages by chat:")
@@ -103,8 +102,10 @@ async def test_profile_integration():
 
     # Create profile
     pm = ProfileManager()
+    from camouchat_core import Platform
+
     print("\n📝 Creating test profile...")
-    profile = pm.create_profile("whatsapp", "sqlalchemy_test")
+    profile = pm.create_profile(Platform.WHATSAPP, "sqlalchemy_test")
 
     print("\n📁 Profile paths:")
     print(f"  - Profile dir: {profile.profile_dir}")
@@ -112,19 +113,15 @@ async def test_profile_integration():
 
     # Create storage from profile
     queue = asyncio.Queue()
-    storage = SQLAlchemyStorage.from_profile(
-        profile=profile, queue=queue, log=log, batch_size=3
-    )
+    storage = SQLAlchemyStorage.from_profile(profile=profile, queue=queue, log=log, batch_size=3)
 
     print("\n✅ Created storage from profile:")
-    print(f"  - Database URL: {storage.database_url}")
+    print(f"  - Database Credentials: {storage.db_credentials}")
 
     async with storage:
         # Add test messages
         messages = [
-            MockMessage(
-                f"profile_msg_{i}", f"Test message {i}", False, "ProfileTestChat"
-            )
+            MockMessage(f"profile_msg_{i}", f"Test message {i}", False, "ProfileTestChat")
             for i in range(5)
         ]
 
@@ -137,7 +134,7 @@ async def test_profile_integration():
         print(f"✅ Stored {len(all_msgs)} messages in profile database")
 
         # Check database file exists
-        if profile.database_path.exists():
+        if profile.database_path and profile.database_path.exists():
             size = profile.database_path.stat().st_size
             print(f"✅ Database file created: {size} bytes")
 
@@ -150,7 +147,7 @@ async def test_profile_integration():
 
     # Ignore errors so it doesn't fail the build
     try:
-        pm.delete_profile("whatsapp", "sqlalchemy_test", force=True)
+        pm.delete_profile(profile, force=True)
     except Exception as e:
         print(f"Failed to delete profile (Windows file lock?): {e}")
 
@@ -166,9 +163,10 @@ async def test_message_processor_compatibility():
 
     queue = asyncio.Queue()
     storage = SQLAlchemyStorage(
+        profile=None,  # type: ignore
         queue=queue,
         log=log,
-        database_url="sqlite+aiosqlite://",
+        db_credentials={"storage_type": "sqlite", "database_path": ":memory:"},
         batch_size=1,
         flush_interval=0.1,
     )
@@ -222,9 +220,10 @@ async def test_batch_performance():
 
     queue = asyncio.Queue()
     storage = SQLAlchemyStorage(
+        profile=None,  # type: ignore
         queue=queue,
         log=log,
-        database_url="sqlite+aiosqlite:///batch_test.db",
+        db_credentials={"storage_type": "sqlite", "database_path": "batch_test.db"},
         batch_size=50,
         flush_interval=2.0,
     )
@@ -250,7 +249,7 @@ async def test_batch_performance():
         # Verify
         count = len(await storage.get_all_messages_async(limit=200))
         print(f"✅ Inserted {count} messages in {elapsed:.2f}s")
-        print(f"  - Rate: {count/elapsed:.1f} messages/sec")
+        print(f"  - Rate: {count / elapsed:.1f} messages/sec")
 
     print("✅ Batch performance test complete")
 
@@ -261,9 +260,8 @@ async def cleanup_test_files():
     test_files = ["test_messages.db", "compatibility_test.db", "batch_test.db"]
 
     for file in test_files:
-        path = Path(file)
-        if path.exists():
-            path.unlink()
+        if await asyncio.to_thread(os.path.exists, file):
+            await asyncio.to_thread(os.unlink, file)
             print(f"  ✅ Deleted {file}")
 
 

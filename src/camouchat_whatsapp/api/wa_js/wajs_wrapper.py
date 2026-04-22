@@ -1,81 +1,99 @@
 import asyncio
 import base64
+import inspect
 import json
 import os
+import secrets
 import time
-import uuid
 from logging import Logger, LoggerAdapter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from playwright.async_api import Page
 
 from camouchat_whatsapp.exceptions import WAJSError
 from camouchat_whatsapp.logger import w_logger
 
-# Todo , add logger later
 from .wajs_scripts import WAJS_Scripts
 
 
 class WapiWrapper:
     """
     The Bridge connecting Playwright (Python) to wa-js (Browser).
-
-    Architecture:
-        - Reads data via a CustomEvent bridge (Isolated World → Main World → Isolated World).
-        - All WPP calls route through the hidden `window.__react_devtools_hook` reference
-          (WPP is deleted from window after injection to avoid Meta's integrity scanners).
-        - Errors are swallowed in JS, formatted, and re-raised cleanly as WAJSError in Python.
     """
 
-    def __init__(self, page: Page, log: Optional[Union[LoggerAdapter, Logger]] = None):
+    def _save_bytes(self, path: str, data: bytes) -> None:
+        """Sync helper for writing bytes to disk."""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+
+    def _read_text(self, path: str) -> str:
+        """Sync helper for reading text from disk."""
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def __init__(self, page: Page, log: LoggerAdapter | Logger | None = None):
         self.page = page
         self.log = log or w_logger
-        self._bridge_key: Optional[str] = None
-        self._queue_key: Optional[str] = None
+        self._wpp_key: str = ""  # per-session rotated WPP handle key
+        self._bridge_key: str | None = None
+        self._queue_key: str | None = None
         self._bridge_active: bool = False
 
     async def _evaluate_stealth(self, js_fragment: str) -> Any:
         """
-        Executes a JS expression inside the Main World via a CustomEvent bridge.
+        Executes a JS fragment in the real Main World via a script-tag injection bridge.
+
+        Why NOT `mw:` async IIFE:
+            Camoufox's `mw:` runs code in Main World, but does NOT await Promises
+            back through CDP — async IIFE results serialize as {} (unresolved Promise).
+            Script tags always execute in Main World AND can dispatch their async result
+            back via CustomEvent, which the Isolated World Promise catches cleanly.
 
         Flow:
-            1. Isolated World sets up a one-shot listener for a unique CustomEvent.
-            2. A <script> tag is injected into the DOM (runs in Main World).
-            3. Main World evaluates `js_fragment` with access to `window.__react_devtools_hook`.
-            4. Result or error is dispatched back as a CustomEvent detail.
-            5. Isolated World receives it and resolves the Promise back to Python.
+            1. Isolated World sets up a one-shot CustomEvent listener (per-call secrets ID).
+            2. A <script> tag is injected into the DOM — executes async IIFE in Main World.
+            3. Main World resolves the WPP call and dispatches {success, data, error}.
+            4. Isolated World catches it, resolves the outer Promise back to Python.
 
         Args:
-            js_fragment: A raw JS expression/IIFE that may be async.
-                         Has access to `const wpp = window.__react_devtools_hook;`
+            js_fragment: Raw JS expression. `const wpp` is injected automatically.
 
         Returns:
-            Deserialized Python object from the JSON result.
+            Deserialized Python object (whatever the fragment evaluates to).
 
         Raises:
-            WAJSError: If JS throws or the bridge returns an error status.
+            WAJSError: On JS error, missing WPP handle, or 30s timeout.
         """
-        req_id = f"camou_{uuid.uuid4().hex}"
+        if not self._wpp_key:
+            raise WAJSError("WPP handle key not set — was wait_for_ready() called?")
+
+        frame = inspect.currentframe()
+        caller = frame.f_back.f_code.co_name if frame and frame.f_back else "unknown"
+
+        req_id = f"_cr{secrets.token_hex(5)}"  # per-call, no predictable prefix
+        wpp_key = self._wpp_key
 
         bridge_script = f"""() => {{
             return new Promise((resolve) => {{
                 let resolved = false;
-                
-                // 1. Isolated World: listen for result dispatched from the Main World
+
+                // Isolated World: one-shot listener for the Main World result
                 window.addEventListener('{req_id}', (e) => {{
                     resolved = true;
                     resolve(e.detail);
                 }}, {{ once: true }});
 
-                // 2. Timeout guard in Isolated World (30s)
+                // 30s timeout guard
                 setTimeout(() => {{
-                    if (!resolved) {{
-                        resolve({{ status: 'error', message: 'Stealth Bridge Timeout (30s) - Main World did not respond.' }});
-                    }}
+                    if (!resolved) resolve({{
+                        success: false, data: null,
+                        error: 'Bridge timeout (30s) — Main World did not respond.'
+                    }});
                 }}, 30000);
 
-                // 3. Build and inject a <script> tag into the real DOM (executes in Main World)
+                // Inject <script> tag — always runs in Main World regardless of eval context
                 const script = document.createElement('script');
                 const nonceEl = document.querySelector('script[nonce]');
                 if (nonceEl) script.setAttribute('nonce', nonceEl.nonce);
@@ -83,16 +101,20 @@ class WapiWrapper:
                 script.textContent = `
                     (async () => {{
                         try {{
-                            const wpp = window.__react_devtools_hook;
-                            if (!wpp) throw new Error("Hidden WPP handle missing. Was wait_for_ready() called?");
-
+                            const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;
+                            if (!wpp) {{
+                                window.dispatchEvent(new CustomEvent('{req_id}', {{
+                                    detail: {{ success: false, data: null, error: 'WPP handle missing ({wpp_key}).' }}
+                                }}));
+                                return;
+                            }}
                             const res = await ({js_fragment});
                             window.dispatchEvent(new CustomEvent('{req_id}', {{
-                                detail: {{ status: 'success', data: res }}
+                                detail: {{ success: true, data: res, error: null }}
                             }}));
                         }} catch (err) {{
                             window.dispatchEvent(new CustomEvent('{req_id}', {{
-                                detail: {{ status: 'error', message: err.toString() }}
+                                detail: {{ success: false, data: null, error: err.toString() }}
                             }}));
                         }}
                     }})();
@@ -102,17 +124,16 @@ class WapiWrapper:
             }});
         }}"""
 
-        response = await self.page.evaluate(bridge_script)
+        raw = await self.page.evaluate(bridge_script)
 
-        if not response or not isinstance(response, dict):
-            raise WAJSError(f"Invalid stealth bridge response: {response}")
+        if not isinstance(raw, dict):
+            raise WAJSError(f"[{caller}] _evaluate_stealth: unexpected response: {raw!r}")
+        if not raw.get("success"):
+            err = raw.get("error", "Unknown JS error")
+            self.log.error(f"[{caller}] WA-JS error: {err}")
+            raise WAJSError(f"[{caller}] {err}")
 
-        if response.get("status") == "error":
-            err_msg = response.get("message", "Unknown JS error in wa-js execution")
-            self.log.error(f"WA-JS Error: {err_msg}")
-            raise WAJSError(err_msg)
-
-        return response.get("data")
+        return raw.get("data")
 
     # ─────────────────────────────────────────────
     # 1. SETUP & LIFECYCLE
@@ -121,15 +142,15 @@ class WapiWrapper:
     async def wait_for_ready(self, timeout_ms: float = 60000) -> bool:
         """
         Injects wppconnect-wa.js into the Main World, waits for WPP to init,
-        then performs the 'Smash & Grab' — hides WPP under a non-enumerable
-        property (`window.__react_devtools_hook`) and deletes `window.WPP`
-        to evade Meta's integrity.js scanners.
+        then performs the 'Smash & Grab':
+          - Generates a per-session randomized key (e.g. `__react_devtools_a3f9c1b2`).
+          - Hides WPP under that non-enumerable, non-configurable, non-writable key.
+          - Deletes `window.WPP` to evade Meta's integrity.js scanners.
         """
-        js_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "wppconnect-wa.js")
+        js_path = await asyncio.to_thread(
+            os.path.abspath, os.path.join(os.path.dirname(__file__), "wppconnect-wa.js")
         )
-        with open(js_path, "r", encoding="utf-8") as f:
-            js_code = f.read()
+        js_code = await asyncio.to_thread(self._read_text, js_path)
 
         self.log.info("Injecting WPP engine and waiting for Webpack integration...")
 
@@ -139,9 +160,7 @@ class WapiWrapper:
         while (time.time() - start) * 1000 < timeout_ms:
             try:
                 if not injected:
-                    has_global = await self.page.evaluate(
-                        "mw:typeof window.WPP !== 'undefined'"
-                    )
+                    has_global = await self.page.evaluate("mw:typeof window.WPP !== 'undefined'")
                     if not has_global:
                         try:
                             await self.page.evaluate(
@@ -167,41 +186,39 @@ class WapiWrapper:
                         "mw:window.WPP && window.WPP.isReady === true"
                     )
                     if is_ready:
-                        # Hide WPP under a non-enumerable, non-configurable,
-                        # non-writable property so:
-                        #   - Object.keys(window)   → WPP invisible
-                        #   - Object.defineProperty  → cannot redefine
-                        #   - window.__react_devtools_hook = null → rejected
-                        await self.page.evaluate("""mw:(() => {
-                            Object.defineProperty(window, "__react_devtools_hook", {
+                        wpp_key = f"__react_devtools_{secrets.token_hex(4)}"
+
+                        # override properties-----------
+                        await self.page.evaluate(f"""mw:(() => {{
+                            Object.defineProperty(window, '{wpp_key}', {{
                                 value: window.WPP,
                                 enumerable: false,
                                 configurable: false,
                                 writable: false
-                            });
+                            }});
                             delete window.WPP;
-                        })()""")
+                        }})()""")
 
-                        # Confirm WPP is gone from enumerable keys and
-                        # the hidden handle is alive and non-null.
-                        sweep_ok = await self.page.evaluate("""mw:(() => {
-                            const keys = Object.keys(window);
-                            const wppGone = !keys.includes('WPP');
-                            const handleOk = typeof window.__react_devtools_hook === 'object'
-                                && window.__react_devtools_hook !== null;
-                            return wppGone && handleOk;
-                        })()""")
+                        # Verify WPP is deleted + handle is live.
+                        sweep_ok = await self.page.evaluate(f"""mw:(() => {{
+                            const wppGone = !Object.keys(window).includes('WPP');
+                            const desc = Object.getOwnPropertyDescriptor(window, '{wpp_key}');
+                            const handleOk = desc && typeof desc.value === 'object' && desc.value !== null;
+                            return wppGone && !!handleOk;
+                        }})()""")
 
                         if not sweep_ok:
-                            self.log.error(
+                            raise WAJSError(
                                 "Smash & Grab verification FAILED — "
                                 "WPP still enumerable or handle is null."
                             )
-                            return False
 
+                        self._wpp_key = wpp_key
                         self.log.info(
-                            "WPP engine integrated! Global 'window.WPP' annihilated → "
-                            "stealth handle locked (enumerable=false, configurable=false, writable=false)."
+                            "WPP engine integrated! window.WPP annihilated → stealth handle locked."
+                        )
+                        self.log.debug(
+                            f"wpp_key='{wpp_key[:20]}...' (enumerable=false, configurable=false, writable=false)."
                         )
                         return True
 
@@ -247,9 +264,7 @@ class WapiWrapper:
         Object.keys(window), for..in enumeration, and WhatsApp integrity scans.
         """
         if self._bridge_active:
-            self.log.warning(
-                "setup_message_bridge: bridge already active, skipping re-register."
-            )
+            self.log.warning("setup_message_bridge: bridge already active, skipping re-register.")
             return
 
         bridge_key = self._get_bridge_key()  # random per session, e.g. '_c203a2bd9fdb1'
@@ -274,10 +289,11 @@ class WapiWrapper:
         }})()""")
 
         # Register wpp.on listener — entirely in Main World via mw:.
+        wpp_key = self._wpp_key
         await self.page.evaluate(f"""mw:(async () => {{
-            const wpp = window.__react_devtools_hook;
+            const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;
             if (!wpp) {{
-                console.warn('CamouBridge: WPP handle missing.');
+                console.warn('CamouBridge: WPP handle missing at key {wpp_key}.');
                 return;
             }}
             if (window['{guard_key}']) return;
@@ -295,7 +311,7 @@ class WapiWrapper:
 
         self._bridge_active = True
         self.log.info(
-            f"Stealth DOM Bridge active. queue='{queue_key}' (hidden, non-enumerable) | Mode: mw: poll"
+            f"Stealth DOM Bridge active. wpp_key='{wpp_key}' queue='{queue_key}' (hidden, non-enumerable) | Mode: mw: poll"
         )
 
     async def poll_message_queue(self) -> list:
@@ -309,8 +325,7 @@ class WapiWrapper:
         try:
             qk = self._queue_key
             ids = await self.page.evaluate(
-                f"mw:(() => {{ const q = window['{qk}'] || []; "
-                f"window['{qk}'] = []; return q; }})()"
+                f"mw:(() => {{ const q = window['{qk}'] || []; window['{qk}'] = []; return q; }})()"
             )
             return ids or []
         except Exception:
@@ -377,7 +392,7 @@ class WapiWrapper:
 
     async def get_chat_list(
         self,
-        count: Optional[int] = None,
+        count: int | None = None,
         direction: str = "after",
         only_users: bool = False,
         only_groups: bool = False,
@@ -385,10 +400,10 @@ class WapiWrapper:
         only_unread: bool = False,
         only_archived: bool = False,
         only_newsletter: bool = False,
-        with_labels: Optional[List] = None,
-        anchor_chat_id: Optional[str] = None,
+        with_labels: list | None = None,
+        anchor_chat_id: str | None = None,
         ignore_group_metadata: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch a list of chats from ChatStore in sidebar order.
 
@@ -424,7 +439,7 @@ class WapiWrapper:
             )
         )
 
-    async def get_chat(self, chat_id: str) -> Dict[str, Any]:
+    async def get_chat(self, chat_id: str) -> dict[str, Any]:
         """Fetch all scalar metadata for a chat from React memory."""
         return await self._evaluate_stealth(WAJS_Scripts.get_chat(chat_id))
 
@@ -434,10 +449,10 @@ class WapiWrapper:
         count: int = 50,
         direction: str = "before",
         only_unread: bool = False,
-        media: Optional[str] = None,
+        media: str | None = None,
         include_calls: bool = False,
-        anchor_msg_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        anchor_msg_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Fetch messages for a chat from React RAM.
 
@@ -465,7 +480,7 @@ class WapiWrapper:
             )
         )
 
-    async def get_message_by_id(self, msg_id: str) -> Dict[str, Any]:
+    async def get_message_by_id(self, msg_id: str) -> dict[str, Any]:
         """
         Fetch one specific message by its full serialized ID.
 
@@ -479,19 +494,27 @@ class WapiWrapper:
     # ─────────────────────────────────────────────
 
     async def send_text_message(
-        self, chat_id: str, message: str, options: Optional[Dict[str, Any]] = None
+        self, chat_id: str, message: str, options: dict[str, Any] | None = None
     ) -> bool:
         """
-        Pure api text send (Tier 3 fallback).
-        Use only when Playwright UI interaction fails.
+        Pure api text send — fire-and-forget via mw: direct eval.
+
+        Why bypass _evaluate_stealth:
+            sendTextMessage may wait for server ACK or perform async lookups
+            (e.g. quoted message resolution) that make the bridge time out.
+            mw: sync IIFE + setTimeout(0) fires the call and returns immediately.
+
+        Options default: waitForAck=False so WPP doesn't block on delivery signal.
         """
         try:
             safe_msg = json.dumps(message)
             safe_options = json.dumps(options or {"waitForAck": False})
+            wpp_key = self._wpp_key
             await self.page.evaluate(
                 f"mw:(() => {{"
-                f"  const wpp = window.__react_devtools_hook;"
-                f"  setTimeout(() => wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_options}).catch(() => null), 0);"
+                f"  const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;"
+                f"  if (wpp) setTimeout(() => wpp.chat.sendTextMessage('{chat_id}', {safe_msg}, {safe_options}).catch(() => null), 0);"
+                f"  else console.warn('[CamouChat] send_text_message: WPP handle missing ({wpp_key})');"
                 f"}})()"
             )
             return True
@@ -511,9 +534,7 @@ class WapiWrapper:
     async def mark_is_composing(self, chat_id: str, duration_ms: int = 3000) -> bool:
         """Sends typing state to the chat."""
         try:
-            res = await self._evaluate_stealth(
-                WAJS_Scripts.mark_is_composing(chat_id, duration_ms)
-            )
+            res = await self._evaluate_stealth(WAJS_Scripts.mark_is_composing(chat_id, duration_ms))
             return bool(res)
         except Exception as e:
             self.log.warning(f"mark_is_composing failed: {e}")
@@ -527,7 +548,7 @@ class WapiWrapper:
         self,
         min_row_id: int,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch raw message data sequentially from IndexedDB storage across ALL chats.
         Type: RAM (Disk)
@@ -546,9 +567,9 @@ class WapiWrapper:
         direct_path: str,
         media_key_b64: str,
         media_type: str,
-        msg_id: Optional[str] = None,
-        save_path: Optional[str] = None,
-    ) -> Optional[bytes]:
+        msg_id: str | None = None,
+        save_path: str | None = None,
+    ) -> bytes | None:
         """
         Extract and decrypt WhatsApp media using the fields embedded in the raw MsgModel dump.
         Primary path reads directly from the browser Cache api — zero network cost.
@@ -590,9 +611,7 @@ class WapiWrapper:
                 f"decrypt_media: Cache miss for {direct_path!r} — "
                 f"falling back to CDN download via wpp.chat.downloadMedia() [NETWORK]"
             )
-            b64 = await self._evaluate_stealth(
-                WAJS_Scripts.download_media(msg_id=msg_id)
-            )
+            b64 = await self._evaluate_stealth(WAJS_Scripts.download_media(msg_id=msg_id))
 
         if not b64:
             return None
@@ -600,16 +619,13 @@ class WapiWrapper:
         raw_bytes = base64.b64decode(b64)
 
         if save_path:
-            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-            Path(save_path).write_bytes(raw_bytes)
-            self.log.info(
-                f"decrypt_media: Saved {len(raw_bytes):,} bytes → {save_path}"
-            )
+            await asyncio.to_thread(self._save_bytes, save_path, raw_bytes)
+            self.log.info(f"decrypt_media: Saved {len(raw_bytes):,} bytes → {save_path}")
 
         return raw_bytes
 
     # MIME type → file extension map for auto-naming saved media
-    _MIME_TO_EXT: Dict[str, str] = {
+    _MIME_TO_EXT: dict[str, str] = {
         "image/jpeg": ".jpg",
         "image/png": ".png",
         "image/webp": ".webp",
@@ -629,7 +645,7 @@ class WapiWrapper:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
     }
-    _TYPE_EXT_FALLBACK: Dict[str, str] = {
+    _TYPE_EXT_FALLBACK: dict[str, str] = {
         "image": ".jpg",
         "video": ".mp4",
         "audio": ".ogg",
@@ -639,7 +655,7 @@ class WapiWrapper:
     }
 
     @staticmethod
-    def _ext_from_mime(mimetype: Optional[str], media_type: str = "image") -> str:
+    def _ext_from_mime(mimetype: str | None, media_type: str = "image") -> str:
         """Derive file extension from mimetype, falling back to media_type."""
         if mimetype:
             base = mimetype.split(";")[0].strip().lower()
@@ -648,7 +664,7 @@ class WapiWrapper:
         return WapiWrapper._TYPE_EXT_FALLBACK.get(media_type, ".bin")
 
     @staticmethod
-    def media_save_path(message: Dict[str, Any], save_dir: str) -> str:
+    def media_save_path(message: dict[str, Any], save_dir: str) -> str:
         """
         Auto-generate a filesystem path for a media message.
 
@@ -668,9 +684,9 @@ class WapiWrapper:
 
     async def extract_media(
         self,
-        message: Dict[str, Any],
+        message: dict[str, Any],
         save_path: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Extract and save WhatsApp media using WPP's internal download pipeline.
 
@@ -690,7 +706,7 @@ class WapiWrapper:
         media_type = message.get("type", "media")
         mimetype = message.get("mimetype")
 
-        result_dict: Dict[str, Any] = {
+        result_dict: dict[str, Any] = {
             "success": False,
             "type": media_type,
             "mimetype": mimetype,
@@ -714,9 +730,7 @@ class WapiWrapper:
         )
 
         try:
-            js_result = await self._evaluate_stealth(
-                WAJS_Scripts.download_media(msg_id=msg_id)
-            )
+            js_result = await self._evaluate_stealth(WAJS_Scripts.download_media(msg_id=msg_id))
         except Exception as e:
             result_dict["error"] = f"JS error: {e}"
             self.log.warning(f"extract_media: {result_dict['error']}")
@@ -729,12 +743,8 @@ class WapiWrapper:
 
         # Unpack structured result {b64, isCached, latencyMs}
         b64 = js_result.get("b64") if isinstance(js_result, dict) else js_result
-        is_cached = (
-            js_result.get("isCached", False) if isinstance(js_result, dict) else False
-        )
-        js_latency_ms = (
-            js_result.get("latencyMs", 0.0) if isinstance(js_result, dict) else 0.0
-        )
+        is_cached = js_result.get("isCached", False) if isinstance(js_result, dict) else False
+        js_latency_ms = js_result.get("latencyMs", 0.0) if isinstance(js_result, dict) else 0.0
 
         if not b64:
             result_dict["error"] = f"null blob for {msg_id!r}."
@@ -748,8 +758,7 @@ class WapiWrapper:
             self.log.warning(f"extract_media: {result_dict['error']}")
             return result_dict
 
-        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(save_path).write_bytes(raw_bytes)
+        await asyncio.to_thread(self._save_bytes, save_path, raw_bytes)
 
         # isCached is derived from JS-native performance.now() timing (<150ms = CACHE)
         source = "CACHE" if is_cached else "NETWORK"
@@ -773,14 +782,14 @@ class WapiWrapper:
     # 6. NEWSLETTER (CHANNELS)
     # ─────────────────────────────────────────────
 
-    async def newsletter_list(self) -> List[Dict[str, Any]]:
+    async def newsletter_list(self) -> list[dict[str, Any]]:
         """
         Fetch all WhatsApp Channels (Newsletters) you follow.
         Returns raw ChatModel dicts (same shape as get_chat_list()).
         """
         return await self._evaluate_stealth(WAJS_Scripts.newsletter_list())
 
-    async def newsletter_search(self, query: str, limit: int = 20) -> Dict[str, Any]:
+    async def newsletter_search(self, query: str, limit: int = 20) -> dict[str, Any]:
         """
         Search the WhatsApp Channel directory.
 
@@ -802,9 +811,7 @@ class WapiWrapper:
         Args:
             newsletter_id: The @newsletter JID e.g. '120363xxxxx@newsletter'.
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.newsletter_follow(newsletter_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.newsletter_follow(newsletter_id))
 
     async def newsletter_unfollow(self, newsletter_id: str) -> bool:
         """
@@ -813,9 +820,7 @@ class WapiWrapper:
         Args:
             newsletter_id: The @newsletter JID e.g. '120363xxxxx@newsletter'.
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.newsletter_unfollow(newsletter_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.newsletter_unfollow(newsletter_id))
 
     async def newsletter_mute(self, newsletter_id: str) -> Any:
         """Mute notifications for a WhatsApp Channel."""
@@ -823,9 +828,7 @@ class WapiWrapper:
 
     async def newsletter_unmute(self, newsletter_id: str) -> Any:
         """Unmute notifications for a WhatsApp Channel."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.newsletter_unmute(newsletter_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.newsletter_unmute(newsletter_id))
 
     # ═══════════════════════════════════════════════════════════
     # READ-LEVEL — DATA & INTROSPECTION
@@ -853,7 +856,8 @@ class WapiWrapper:
     async def conn_get_my_user_wid(self) -> Any:
         """
         Type: RAM (AccountStore).
-        Returns: str — full serialized Wid e.g. '919876543210@c.us' (same as user_id for personal accounts).
+        Returns: str — full serialized Wid e.g. '919876543210@c.us'
+                 (same as user_id for personal accounts).
         """
         return await self._evaluate_stealth(WAJS_Scripts.conn_get_my_user_wid())
 
@@ -959,9 +963,7 @@ class WapiWrapper:
             video     (bool)
             documents (bool)
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.conn_get_auto_download_settings()
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.conn_get_auto_download_settings())
 
     async def conn_get_history_sync_progress(self) -> Any:
         """
@@ -969,9 +971,7 @@ class WapiWrapper:
         Returns: dict|None — sync progress object, or None if no sync is in progress.
                  Relevant only during the first few minutes of a new device link.
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.conn_get_history_sync_progress()
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.conn_get_history_sync_progress())
 
     async def conn_needs_update(self) -> bool:
         """
@@ -985,7 +985,7 @@ class WapiWrapper:
     # 8. CONTACT (READ)
     # ─────────────────────────────────────────────
 
-    async def contact_get(self, contact_id: str) -> Dict[str, Any]:
+    async def contact_get(self, contact_id: str) -> dict[str, Any]:
         """
         Type: RAM (ContactStore — synchronous map lookup, zero network cost).
         NOTE: Your own ID will return {} — you are not stored in your own ContactStore.
@@ -1007,7 +1007,7 @@ class WapiWrapper:
         """
         return await self._evaluate_stealth(WAJS_Scripts.contact_get(contact_id))
 
-    async def contact_list(self, count: int = 20) -> List[Dict[str, Any]]:
+    async def contact_list(self, count: int = 20) -> list[dict[str, Any]]:
         """
         Type: RAM (ContactStore — synchronous ES6 Map iteration).
         Returns: list of contact dicts (see contact_get for field reference).
@@ -1030,9 +1030,7 @@ class WapiWrapper:
             lid             (dict) — {server, user, _serialized} — linked device ID
         Returns None if the number does not have WhatsApp.
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.contact_query_exists(contact_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.contact_query_exists(contact_id))
 
     async def contact_get_profile_picture_url(self, contact_id: str) -> Any:
         """
@@ -1060,24 +1058,20 @@ class WapiWrapper:
         Returns: dict with business fields (address, email, website, category, description)
                  None if the contact is not a Business account.
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.contact_get_business_profile(contact_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.contact_get_business_profile(contact_id))
 
     async def contact_get_common_groups(self, contact_id: str) -> Any:
         """
         Type: NETWORK ⚠️ — XMPP query for shared group list.
         Returns: list of group ID strings e.g. ['120363401916939000@g.us', ...]
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.contact_get_common_groups(contact_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.contact_get_common_groups(contact_id))
 
     # ─────────────────────────────────────────────
     # 9. GROUP (READ)
     # ─────────────────────────────────────────────
 
-    async def group_get_all(self) -> List[Dict[str, Any]]:
+    async def group_get_all(self) -> list[dict[str, Any]]:
         """
         Type: RAM (ChatStore filter — zero network cost).
         Returns: list of group ChatModel dicts. Observed fields per group:
@@ -1122,9 +1116,7 @@ class WapiWrapper:
             isAdmin       (bool)
             isSuperAdmin  (bool)
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_get_participants(group_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_get_participants(group_id))
 
     async def group_get_invite_code(self, group_id: str) -> Any:
         """
@@ -1132,9 +1124,7 @@ class WapiWrapper:
         Returns: str — the invite code portion of the link
                  (full link = 'https://chat.whatsapp.com/<invite_code>')
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_get_invite_code(group_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_get_invite_code(group_id))
 
     async def group_get_info_from_invite_code(self, invite_code: str) -> Any:
         """
@@ -1157,9 +1147,7 @@ class WapiWrapper:
             addedBy        (str) — who added them (if via invite link)
             requestTime    (int) — Unix timestamp of request
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_get_membership_requests(group_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_get_membership_requests(group_id))
 
     async def group_get_past_participants(self, group_id: str) -> Any:
         """
@@ -1168,9 +1156,7 @@ class WapiWrapper:
             id_serialized  (str) — their WhatsApp ID
             leaveTs        (int) — Unix timestamp when they left
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_get_past_participants(group_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_get_past_participants(group_id))
 
     async def group_i_am_admin(self, group_id: str) -> bool:
         """
@@ -1184,9 +1170,7 @@ class WapiWrapper:
         Type: RAM (GroupMetadataStore).
         Returns: bool — True if you are the group creator (super-admin).
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_i_am_super_admin(group_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_i_am_super_admin(group_id))
 
     async def group_get_size_limit(self) -> Any:
         """
@@ -1200,7 +1184,7 @@ class WapiWrapper:
     # 10. BLOCKLIST (READ)
     # ─────────────────────────────────────────────
 
-    async def blocklist_all(self) -> List[Dict[str, Any]]:
+    async def blocklist_all(self) -> list[dict[str, Any]]:
         """
         Type: RAM (BlocklistStore — local list, no network cost).
         Returns: list of blocked contact dicts (same fields as contact_get).
@@ -1213,9 +1197,7 @@ class WapiWrapper:
         Type: RAM (BlocklistStore — O(1) set lookup).
         Returns: bool — True if the contact_id is in your block list.
         """
-        return await self._evaluate_stealth(
-            WAJS_Scripts.blocklist_is_blocked(contact_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.blocklist_is_blocked(contact_id))
 
     # ─────────────────────────────────────────────
     # 11. STATUS / STORIES (READ)
@@ -1324,15 +1306,11 @@ class WapiWrapper:
 
     async def community_get_subgroups(self, community_id: str) -> Any:
         """Child group chats of a Community."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.community_get_subgroups(community_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.community_get_subgroups(community_id))
 
     async def community_get_participants(self, community_id: str) -> Any:
         """All members across a Community."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.community_get_participants(community_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.community_get_participants(community_id))
 
     async def community_get_announcement_group(self, community_id: str) -> Any:
         """The admin broadcast/announcement group of a Community."""
@@ -1374,15 +1352,11 @@ class WapiWrapper:
 
     async def contact_subscribe_presence(self, contact_id: str) -> Any:
         """Start receiving real-time online/typing presence events for a contact."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.contact_subscribe_presence(contact_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.contact_subscribe_presence(contact_id))
 
     async def contact_unsubscribe_presence(self, contact_id: str) -> Any:
         """Stop receiving presence events for a contact."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.contact_unsubscribe_presence(contact_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.contact_unsubscribe_presence(contact_id))
 
     async def contact_save(self, contact_id: str, name: str) -> Any:
         """Save or update the display name for a contact."""
@@ -1400,39 +1374,29 @@ class WapiWrapper:
     # GROUP (ACTIONS)
     # ─────────────────────────────────────────────
 
-    async def group_create(self, name: str, participants: List[str]) -> Any:
+    async def group_create(self, name: str, participants: list[str]) -> Any:
         """Create a new group chat."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_create(name, participants)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_create(name, participants))
 
-    async def group_add_participants(
-        self, group_id: str, participants: List[str]
-    ) -> Any:
+    async def group_add_participants(self, group_id: str, participants: list[str]) -> Any:
         """Add members to a group."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_add_participants(group_id, participants)
         )
 
-    async def group_remove_participants(
-        self, group_id: str, participants: List[str]
-    ) -> Any:
+    async def group_remove_participants(self, group_id: str, participants: list[str]) -> Any:
         """Remove members from a group."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_remove_participants(group_id, participants)
         )
 
-    async def group_promote_participants(
-        self, group_id: str, participants: List[str]
-    ) -> Any:
+    async def group_promote_participants(self, group_id: str, participants: list[str]) -> Any:
         """Promote members to admin."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_promote_participants(group_id, participants)
         )
 
-    async def group_demote_participants(
-        self, group_id: str, participants: List[str]
-    ) -> Any:
+    async def group_demote_participants(self, group_id: str, participants: list[str]) -> Any:
         """Remove admin from members."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_demote_participants(group_id, participants)
@@ -1448,33 +1412,23 @@ class WapiWrapper:
 
     async def group_set_subject(self, group_id: str, name: str) -> Any:
         """Rename a group."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_set_subject(group_id, name)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_set_subject(group_id, name))
 
     async def group_set_description(self, group_id: str, text: str) -> Any:
         """Set the group description."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_set_description(group_id, text)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_set_description(group_id, text))
 
     async def group_revoke_invite_code(self, group_id: str) -> Any:
         """Revoke the current invite link and generate a new one."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.group_revoke_invite_code(group_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.group_revoke_invite_code(group_id))
 
-    async def group_approve_membership(
-        self, group_id: str, participants: List[str]
-    ) -> Any:
+    async def group_approve_membership(self, group_id: str, participants: list[str]) -> Any:
         """Approve pending join requests."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_approve_membership(group_id, participants)
         )
 
-    async def group_reject_membership(
-        self, group_id: str, participants: List[str]
-    ) -> Any:
+    async def group_reject_membership(self, group_id: str, participants: list[str]) -> Any:
         """Reject pending join requests."""
         return await self._evaluate_stealth(
             WAJS_Scripts.group_reject_membership(group_id, participants)
@@ -1496,11 +1450,9 @@ class WapiWrapper:
     # STATUS (ACTIONS)
     # ─────────────────────────────────────────────
 
-    async def status_send_text(self, text: str, bg_color: Optional[str] = None) -> Any:
+    async def status_send_text(self, text: str, bg_color: str | None = None) -> Any:
         """Post a text Status story."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.status_send_text(text, bg_color)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.status_send_text(text, bg_color))
 
     async def status_send_read(self, msg_id: str) -> Any:
         """Mark a Status story as viewed."""
@@ -1544,9 +1496,7 @@ class WapiWrapper:
 
     async def privacy_set_read_receipts(self, value: str) -> Any:
         """Enable/disable blue ticks. Values: 'all'|'none'."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.privacy_set_read_receipts(value)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.privacy_set_read_receipts(value))
 
     async def privacy_set_add_group(self, value: str) -> Any:
         """Who can add you to groups."""
@@ -1560,7 +1510,7 @@ class WapiWrapper:
     # LABELS (ACTIONS) — Business accounts only
     # ─────────────────────────────────────────────
 
-    async def labels_add_new(self, name: str, color: Optional[int] = None) -> Any:
+    async def labels_add_new(self, name: str, color: int | None = None) -> Any:
         """Create a new label."""
         return await self._evaluate_stealth(WAJS_Scripts.labels_add_new(name, color))
 
@@ -1568,11 +1518,9 @@ class WapiWrapper:
         """Delete a label."""
         return await self._evaluate_stealth(WAJS_Scripts.labels_delete(label_id))
 
-    async def labels_apply(self, chat_id: str, label_ids: List[str]) -> Any:
+    async def labels_apply(self, chat_id: str, label_ids: list[str]) -> Any:
         """Apply labels to a chat."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.labels_apply(chat_id, label_ids)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.labels_apply(chat_id, label_ids))
 
     # ─────────────────────────────────────────────
     # CALL (ACTIONS)
@@ -1580,9 +1528,7 @@ class WapiWrapper:
 
     async def call_offer(self, contact_id: str, is_video: bool = False) -> Any:
         """Initiate a voice or video call."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.call_offer(contact_id, is_video)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.call_offer(contact_id, is_video))
 
     async def call_accept(self, call_id: str) -> Any:
         """Accept an incoming call."""
@@ -1600,29 +1546,21 @@ class WapiWrapper:
     # COMMUNITY (ACTIONS)
     # ─────────────────────────────────────────────
 
-    async def community_create(self, name: str, group_ids: List[str]) -> Any:
+    async def community_create(self, name: str, group_ids: list[str]) -> Any:
         """Create a new Community with existing groups."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.community_create(name, group_ids)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.community_create(name, group_ids))
 
     async def community_deactivate(self, community_id: str) -> Any:
         """Deactivate / close a Community."""
-        return await self._evaluate_stealth(
-            WAJS_Scripts.community_deactivate(community_id)
-        )
+        return await self._evaluate_stealth(WAJS_Scripts.community_deactivate(community_id))
 
-    async def community_add_subgroups(
-        self, community_id: str, group_ids: List[str]
-    ) -> Any:
+    async def community_add_subgroups(self, community_id: str, group_ids: list[str]) -> Any:
         """Add groups to an existing Community."""
         return await self._evaluate_stealth(
             WAJS_Scripts.community_add_subgroups(community_id, group_ids)
         )
 
-    async def community_remove_subgroups(
-        self, community_id: str, group_ids: List[str]
-    ) -> Any:
+    async def community_remove_subgroups(self, community_id: str, group_ids: list[str]) -> Any:
         """Remove groups from a Community."""
         return await self._evaluate_stealth(
             WAJS_Scripts.community_remove_subgroups(community_id, group_ids)

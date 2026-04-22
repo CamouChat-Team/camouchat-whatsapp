@@ -6,24 +6,26 @@ Uses async operations for non-blocking performance.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from collections.abc import Sequence
 from logging import Logger, LoggerAdapter
+from typing import Any
 
-from typing import List, Dict, Any, Optional, Sequence, Union
-
-from sqlalchemy import select, exists
+from camouchat_browser import DirectoryManager, ProfileInfo
+from camouchat_core import MessageProtocol, StorageProtocol
+from sqlalchemy import exists, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
+    create_async_engine,
 )
 
-from camouchat_browser import ProfileInfo
 from camouchat_whatsapp.exceptions import WhatsAppStorageError
-from camouchat_core import MessageProtocol, StorageProtocol
-from .models import Base, Message
+
 from ..logger import w_logger
+from .models import Base, Message
 
 
 class SQLAlchemyStorage(StorageProtocol):
@@ -42,23 +44,23 @@ class SQLAlchemyStorage(StorageProtocol):
     - MySQL: mysql+aiomysql://user:pass@host/db
     """
 
-    _instances: Dict[str, SQLAlchemyStorage] = {}
+    _instances: dict[str, SQLAlchemyStorage] = {}
     _initialized: bool = False
 
     def __new__(cls, *args, **kwargs) -> SQLAlchemyStorage:
-        database_url = kwargs.get("database_url") or (
-            args[2] if len(args) > 2 else "sqlite+aiosqlite:///messages.db"
-        )
-        if database_url not in cls._instances:
-            instance = super(SQLAlchemyStorage, cls).__new__(cls)
-            cls._instances[database_url] = instance
-        return cls._instances[database_url]
+        db_credentials = kwargs.get("db_credentials") or (args[1] if len(args) > 1 else {})
+        key = cls._build_database_url(db_credentials)
+        if key not in cls._instances:
+            instance = super().__new__(cls)
+            cls._instances[key] = instance
+        return cls._instances[key]
 
     def __init__(
         self,
-        queue: asyncio.Queue,
-        log: Optional[Union[Logger, LoggerAdapter]] = None,
-        database_url: str = "sqlite+aiosqlite:///messages.db",
+        profile: ProfileInfo,
+        queue: asyncio.Queue | None = None,
+        db_credentials: dict | None = None,
+        log: Logger | LoggerAdapter | None = None,
         batch_size: int = 50,
         flush_interval: float = 2.0,
         echo: bool = False,
@@ -69,42 +71,87 @@ class SQLAlchemyStorage(StorageProtocol):
         Initialize SQLAlchemy storage.
 
         Args:
-            queue: Async queue for message batching
+            queue: Async queue for message batching (created automatically if None)
+            db_credentials: DB credential dict
+                (storage_type, username, password, host, port, database_name, database_path)
             log: Logger instance
-            database_url: SQLAlchemy database URL
             batch_size: Max messages before auto-flush
             flush_interval: Seconds before auto-flush even if batch not full
             echo: Enable SQL query logging (for debugging)
         """
-        self.queue = queue
+        self.profile = profile
+        self.queue: asyncio.Queue = queue if queue is not None else asyncio.Queue()
         self.log = log or w_logger
-
-        self.database_url = database_url
+        self.db_credentials: dict = db_credentials or {}
         self._initialized = True
         self.batch_size = batch_size
         self.flush_interval = flush_interval
         self.echo = echo
 
-        self._engine: Optional[AsyncEngine] = None
-        self._session_factory: Optional[async_sessionmaker[AsyncSession]] = None
-        self._writer_task: Optional[asyncio.Task] = None
+        self._engine: AsyncEngine | None = None
+        self._session_factory: async_sessionmaker[AsyncSession] | None = None
+        self._writer_task: asyncio.Task | None = None
         self._running = False
+        self._initialized_ = False
+
+    @staticmethod
+    def _build_database_url(db_credentials: dict) -> str:
+        """
+        Build SQLAlchemy-compatible URL from db_credentials dict.
+
+        Uses sqlalchemy.engine.URL.create() for safe dialect construction.
+        Falls back to SQLite default if storage_type is missing or sqlite.
+        """
+        from sqlalchemy.engine import URL
+
+        storage_type = db_credentials.get("storage_type") or "sqlite"
+        storage_type = storage_type.lower().replace("storagetype.", "")
+
+        if storage_type == "sqlite":
+            db_path = db_credentials.get("database_path")
+            # str(None) from from_profile becomes "None" — treat as missing
+            if not db_path or db_path == "None":
+                from camouchat_browser import DirectoryManager
+
+                platform = db_credentials.get("platform")
+                profile_id = db_credentials.get("profile_id")
+                if platform and profile_id:
+                    db_path = str(DirectoryManager().get_database_path(platform, profile_id))
+                else:
+                    db_path = "messages.db"
+            return f"sqlite+aiosqlite:///{db_path}"
+
+        driver_map = {
+            "postgresql": "postgresql+asyncpg",
+            "mysql": "mysql+aiomysql",
+        }
+        dialect = driver_map.get(storage_type, f"{storage_type}+asyncpg")
+
+        url = URL.create(
+            drivername=dialect,
+            username=db_credentials.get("username"),
+            password=db_credentials.get("password"),
+            host=db_credentials.get("host", "localhost"),
+            port=db_credentials.get("port"),
+            database=db_credentials.get("database_name"),
+        )
+        return str(url)
 
     @classmethod
     def from_profile(
         cls,
         profile: ProfileInfo,
-        queue: asyncio.Queue,
-        log: Optional[Union[Logger, LoggerAdapter]] = None,
+        queue: asyncio.Queue | None = None,
+        log: Logger | LoggerAdapter | None = None,
         batch_size: int = 50,
         flush_interval: float = 2.0,
-    ) -> "SQLAlchemyStorage":
+    ) -> SQLAlchemyStorage:
         """
         Create storage from ProfileInfo.
 
         Args:
             profile: ProfileInfo from ProfileManager
-            queue: Async queue
+            queue: Optional async queue (auto-created if None)
             log: Logger
             batch_size: Batch size
             flush_interval: Flush interval
@@ -112,11 +159,25 @@ class SQLAlchemyStorage(StorageProtocol):
         Returns:
             Configured SQLAlchemyStorage instance
         """
-        database_url = profile.database_url
+        db_credentials = {
+            "storage_type": profile.db_type,
+            "database_path": str(
+                DirectoryManager().get_database_path(profile.platform, profile.profile_id)
+            ),
+            "platform": profile.platform,
+            "profile_id": profile.profile_id,
+            "username": profile.username,
+            "password": profile.password,
+            "host": profile.host,
+            "port": profile.port,
+            "database_name": profile.database_name,
+        }
+
         return cls(
+            profile=profile,
             queue=queue,
             log=log or w_logger,
-            database_url=database_url,
+            db_credentials=db_credentials,
             batch_size=batch_size,
             flush_interval=flush_interval,
         )
@@ -124,11 +185,9 @@ class SQLAlchemyStorage(StorageProtocol):
     async def init_db(self, **kwargs) -> None:
         """Initialize SQLAlchemy engine and session factory."""
         try:
-            is_sqlite = self.database_url.startswith("sqlite")
-            engine_kwargs: dict = {
-                "echo": self.echo,
-                "pool_pre_ping": True,
-            }
+            database_url = self._build_database_url(self.db_credentials)
+            is_sqlite = database_url.startswith("sqlite")
+            engine_kwargs: dict = {"echo": self.echo}
             if not is_sqlite:
                 engine_kwargs.update(
                     {
@@ -139,23 +198,21 @@ class SQLAlchemyStorage(StorageProtocol):
                     }
                 )
 
-            self._engine = create_async_engine(self.database_url, **engine_kwargs)
+            self._engine = create_async_engine(database_url, **engine_kwargs)
 
             # Create session factory
             self._session_factory = async_sessionmaker(
                 self._engine, class_=AsyncSession, expire_on_commit=False
             )
 
-            self.log.info(f"SQLAlchemy engine initialized: {self.database_url}")
+            self.log.info(f"SQLAlchemy engine initialized: {database_url}")
         except Exception as e:
             raise WhatsAppStorageError(f"Failed to initialize database: {e}") from e
 
     async def create_table(self, **kwargs) -> None:
         """Create tables if not exists."""
         if not self._engine:
-            raise WhatsAppStorageError(
-                "Database not initialized. Call init_db() first."
-            )
+            raise WhatsAppStorageError("Database not initialized. Call init_db() first.")
 
         try:
             async with self._engine.begin() as conn:  # type: ignore
@@ -204,21 +261,19 @@ class SQLAlchemyStorage(StorageProtocol):
 
     async def _writer_loop(self) -> None:
         """Background loop that consumes queue and writes batches."""
-        batch: List[MessageProtocol] = []
+        batch: list[MessageProtocol] = []
         last_flush = asyncio.get_event_loop().time()
 
         while self._running:
             try:
                 try:
-                    msg = await asyncio.wait_for(
-                        self.queue.get(), timeout=self.flush_interval
-                    )
+                    msg = await asyncio.wait_for(self.queue.get(), timeout=self.flush_interval)
                     if isinstance(msg, list):
                         batch.extend(msg)
                     else:
                         batch.append(msg)
                     self.queue.task_done()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
 
                 current_time = asyncio.get_event_loop().time()
@@ -249,9 +304,7 @@ class SQLAlchemyStorage(StorageProtocol):
 
         self.log.debug(f"Enqueued {len(msgs)} messages for insertion.")
 
-    async def _insert_batch_internally(
-        self, msgs: Sequence[MessageProtocol], **kwargs
-    ) -> None:
+    async def _insert_batch_internally(self, msgs: Sequence[MessageProtocol], **kwargs) -> None:
         """Insert batch of messages into database."""
         if not self._session_factory:
             raise WhatsAppStorageError("Database not initialized.")
@@ -296,9 +349,7 @@ class SQLAlchemyStorage(StorageProtocol):
                     except IntegrityError:
                         continue  # Skip duplicate
                     except Exception as e:
-                        self.log.warning(
-                            f"Failed to insert message {model.id_serialized}: {e}"
-                        )
+                        self.log.warning(f"Failed to insert message {model.id_serialized}: {e}")
 
                 self.log.debug(
                     f"Inserted {success_count}/{len(message_models)} messages (some duplicates)."
@@ -327,10 +378,8 @@ class SQLAlchemyStorage(StorageProtocol):
 
         meta_data = None
         if hasattr(msg, "to_dict"):
-            try:
+            with contextlib.suppress(Exception):
                 meta_data = msg.to_dict()
-            except Exception:
-                pass
 
         return Message(
             id_serialized=str(msg_id),
@@ -370,7 +419,7 @@ class SQLAlchemyStorage(StorageProtocol):
                 self.log.error(f"Async existence check failed: {e}")
                 return False
 
-    def get_all_messages(self, **kwargs) -> List[Dict[str, Any]]:
+    def get_all_messages(self, **kwargs) -> list[dict[str, Any]]:
         """
         Retrieve all messages from DB (synchronous).
         Uses asyncio.run() internally, not recommended in async context.
@@ -381,7 +430,7 @@ class SQLAlchemyStorage(StorageProtocol):
             self.log.error(f"Get all messages failed: {e}")
             return []
 
-    async def get_all_messages_async(self, **kwargs) -> List[Dict[str, Any]]:
+    async def get_all_messages_async(self, **kwargs) -> list[dict[str, Any]]:
         """Async version of get all messages."""
         if not self._session_factory:
             return []
@@ -392,12 +441,7 @@ class SQLAlchemyStorage(StorageProtocol):
         session_factory = self._get_session_factory()
         async with session_factory() as session:
             try:
-                stmt = (
-                    select(Message)
-                    .order_by(Message.id.desc())
-                    .limit(limit)
-                    .offset(offset)
-                )
+                stmt = select(Message).order_by(Message.id.desc()).limit(limit).offset(offset)
                 result = await session.execute(stmt)
                 messages = result.scalars().all()
                 return [msg.to_dict() for msg in messages]
@@ -405,9 +449,7 @@ class SQLAlchemyStorage(StorageProtocol):
                 self.log.error(f"Async get all messages failed: {e}")
                 return []
 
-    async def get_messages_by_chat(
-        self, chat_id: str, **kwargs
-    ) -> List[Dict[str, Any]]:
+    async def get_messages_by_chat(self, chat_id: str, **kwargs) -> list[dict[str, Any]]:
         """Get messages filtered by chat id (or HMAC digest if encryption is enabled)."""
         if not self._session_factory:
             return []
@@ -430,9 +472,7 @@ class SQLAlchemyStorage(StorageProtocol):
                 self.log.error(f"Get messages by chat failed: {e}")
                 return []
 
-    async def get_messages_by_ids_async(
-        self, message_ids: list[str]
-    ) -> List[Dict[str, Any]]:
+    async def get_messages_by_ids_async(self, message_ids: list[str]) -> list[dict[str, Any]]:
         """Retrieve specific messages by their serialized IDs."""
         if not self._session_factory or not message_ids:
             return []
@@ -449,8 +489,8 @@ class SQLAlchemyStorage(StorageProtocol):
                 return []
 
     async def execute_raw_sql(
-        self, query: str, params: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+        self, query: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """
         Execute a raw SQL query and return results as a list of dictionaries.
         Supports both SELECT and DML (INSERT/UPDATE/DELETE).
@@ -483,7 +523,7 @@ class SQLAlchemyStorage(StorageProtocol):
         key: bytes,
         limit: int = 1000,
         offset: int = 0,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch all messages and decrypt body + chat name on-the-fly.
 
@@ -506,6 +546,7 @@ class SQLAlchemyStorage(StorageProtocol):
             rows = await storage.get_decrypted_messages_async(key)
         """
         import base64 as _b64
+
         from camouchat_core import MessageDecryptor
 
         rows = await self.get_all_messages_async(limit=limit, offset=offset)
@@ -527,9 +568,7 @@ class SQLAlchemyStorage(StorageProtocol):
                         nonce_bytes, cipher_bytes, msg_id or None
                     )
                 except Exception as e:
-                    self.log.warning(
-                        f"Failed to decrypt message {row.get('id_serialized')}: {e}"
-                    )
+                    self.log.warning(f"Failed to decrypt message {row.get('id_serialized')}: {e}")
                     out["body"] = "<decryption failed>"
 
             result.append(out)
@@ -547,10 +586,8 @@ class SQLAlchemyStorage(StorageProtocol):
 
         if self._writer_task:
             self._writer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._writer_task
-            except asyncio.CancelledError:
-                pass
             self._writer_task = None
 
         if self._engine:
@@ -561,10 +598,14 @@ class SQLAlchemyStorage(StorageProtocol):
 
     async def start(self, **kwargs) -> None:
         """Start database and background writer."""
-        await self.init_db()
-        await self.create_table()
-        await self._migrate_add_encryption_columns()
-        await self.start_writer()
+        if self._initialized_:
+            return
+        else:
+            self._initialized_ = True
+            await self.init_db()
+            await self.create_table()
+            await self._migrate_add_encryption_columns()
+            await self.start_writer()
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -575,3 +616,7 @@ class SQLAlchemyStorage(StorageProtocol):
         """Async context manager exit."""
         await self.close_db()
         return False
+
+    async def get_profile_info(self) -> ProfileInfo:
+        """Return the profile info used to initialize the storage."""
+        return self.profile

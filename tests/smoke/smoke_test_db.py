@@ -1,7 +1,9 @@
 import asyncio
 import time
-from camouchat_core import Platform
+
 from camouchat_browser import ProfileManager
+from camouchat_core import Platform
+
 from camouchat_whatsapp import SQLAlchemyStorage
 
 
@@ -26,7 +28,7 @@ async def main():
     profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
 
     # 2. Database Initialization
-    storage = SQLAlchemyStorage.from_profile(profile=profile, queue=asyncio.Queue())
+    storage = SQLAlchemyStorage.from_profile(profile=profile)
     await storage.start()
 
     # 3. Create Mock message

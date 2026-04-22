@@ -4,10 +4,10 @@ Tests cover locator construction and static helper methods.
 """
 
 import re
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
-from playwright.async_api import Page, Locator, ElementHandle
+from playwright.async_api import ElementHandle, Locator, Page
 
 from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 
@@ -128,9 +128,7 @@ async def test_link_phone_number_button(config_instance):
 @pytest.mark.asyncio
 async def test_country_selector_button(config_instance):
     config_instance.country_selector_button()
-    config_instance.page.locator.assert_called_with(
-        "button:has(span[data-icon='chevron'])"
-    )
+    config_instance.page.locator.assert_called_with("button:has(span[data-icon='chevron'])")
 
 
 @pytest.mark.asyncio

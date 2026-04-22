@@ -6,11 +6,8 @@ import asyncio
 import random
 import weakref
 from logging import Logger, LoggerAdapter
-from typing import Optional, Union
 
-from camouchat_whatsapp.exceptions import LoginError
 from camouchat_core import LoginProtocol
-from .web_ui_config import WebSelectorConfig
 from playwright.async_api import (
     Error as PlaywrightError,
 )
@@ -22,8 +19,12 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
+from camouchat_whatsapp.exceptions import LoginError
+
 # Todo, add logger later
 from camouchat_whatsapp.logger import w_logger
+
+from .web_ui_config import WebSelectorConfig
 
 
 class Login(LoginProtocol):
@@ -35,17 +36,17 @@ class Login(LoginProtocol):
     def __new__(cls, *args, **kwargs) -> Login:
         page = kwargs.get("page") or (args[0] if args else None)
         if page is None:
-            return super(Login, cls).__new__(cls)
+            return super().__new__(cls)
         if page not in cls._instances:
-            instance = super(Login, cls).__new__(cls)
+            instance = super().__new__(cls)
             cls._instances[page] = instance
         return cls._instances[page]
 
     def __init__(
         self,
         page: Page,
-        ui_config: Optional[WebSelectorConfig] = None,
-        log: Optional[Union[Logger, LoggerAdapter]] = None,
+        ui_config: WebSelectorConfig | None = None,
+        log: Logger | LoggerAdapter | None = None,
         **kwargs,
     ):
         if hasattr(self, "_initialized") and self._initialized:
@@ -54,10 +55,8 @@ class Login(LoginProtocol):
             raise ValueError("page must not be None")
 
         ui_config = ui_config or kwargs.pop("UIConfig", None)
-        if ui_config is None:
-            raise ValueError("ui_config must not be None")
         self.page = page
-        self.ui_config = ui_config
+        self.ui_config = ui_config or WebSelectorConfig(page=page)
         self.log = log or w_logger
         self._initialized = True
 
@@ -85,8 +84,8 @@ class Login(LoginProtocol):
         method: int = kwargs.get("method", 1)
         wait_time: int = kwargs.get("wait_time", 180_000)
         link: str = kwargs.get("url", "https://web.whatsapp.com")
-        number: Optional[int] = kwargs.get("number")
-        country: Optional[str] = kwargs.get("country")
+        number: int | None = kwargs.get("number")
+        country: str | None = kwargs.get("country")
 
         _max_retries = 3
         for _attempt in range(_max_retries):
@@ -112,14 +111,10 @@ class Login(LoginProtocol):
         elif method == 1:
             success = await self.__code_login(number, country)
         else:
-            raise LoginError(
-                "Invalid login method. Use method=0 (QR) or method=1 (Code)."
-            )
+            raise LoginError("Invalid login method. Use method=0 (QR) or method=1 (Code).")
 
         if success:
-            self.log.info(
-                "WhatsApp login session stored successfully via persistent context."
-            )
+            self.log.info("WhatsApp login session stored successfully via persistent context.")
 
         return success
 
@@ -129,9 +124,7 @@ class Login(LoginProtocol):
         self.log.info("Waiting for QR scan (%s seconds)...", wait_time // 1000)
 
         try:
-            await self.ui_config.chat_list().wait_for(
-                timeout=wait_time, state="visible"
-            )
+            await self.ui_config.chat_list().wait_for(timeout=wait_time, state="visible")
             if await canvas.is_visible():
                 raise LoginError("QR not scanned within allowed time.")
             return True
@@ -169,9 +162,7 @@ class Login(LoginProtocol):
 
         def normalize(name: str) -> str:
             """Normalize hte name"""
-            return (
-                "".join(c for c in name if c.isalpha() or c.isspace()).lower().strip()
-            )
+            return "".join(c for c in name if c.isalpha() or c.isspace()).lower().strip()
 
         target_country = normalize(country)
         selected = False
