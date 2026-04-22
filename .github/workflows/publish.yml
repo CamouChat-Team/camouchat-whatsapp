@@ -15,7 +15,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v1
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
       - uses: actions/setup-python@v4
         with:
           python-version-file: "pyproject.toml"
@@ -38,7 +42,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v1
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
       - uses: actions/setup-python@v4
         with:
           python-version-file: "pyproject.toml"
