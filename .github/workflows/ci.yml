@@ -2,7 +2,7 @@ name: CI
 
 permissions:
   contents: read
-  id-token: write   # for Codecov OIDC (no token needed)
+  id-token: write
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
-      - run: uv sync --all-extras --dev
+      - run: uv sync --group dev
 
       - run: uv run playwright install chromium
 
@@ -55,7 +55,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - run: uv sync --all-extras --dev
+      - run: uv sync --group dev
 
       - run: uv run playwright install --with-deps
 
