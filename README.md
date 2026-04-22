@@ -26,12 +26,23 @@ High-stealth WhatsApp automation plugin for the CamouChat ecosystem. Built on to
 
 ## Key Features
 
-- **WA-JS Integration**: Uses the internal WhatsApp Web API via `wa-js` — not fragile DOM selectors.
-- **Multi-Account Isolation**: Each account runs in a sandboxed profile with isolated cookies, storage, and fingerprints.
-- **E2E Encryption**: All stored messages are encrypted at rest using AES-256-GCM.
-- **Async-First**: Fully `asyncio`-native for high-throughput multi-session workloads.
-- **Humanized Behavior**: Mouse movements, typing cadence, and delays mimic organic user behavior.
-- **Rate Limiting**: Built-in configurable rate-limit support to prevent account bans.
+- **Hybrid Integration**
+  Combines API-driven and DOM-based automation to ensure reliability, stability, and stealth in real-world scenarios.
+
+- **Human-like Behavior**
+  Simulates realistic user interactions with telemetry and DOM event handling to reduce detection and long-term ML-based bans.
+
+- **CamouChat Browser Integration**
+  Powered by CamouChat Browser with Camoufox support (Native stealth support) , enabling seamless multi-account management in fully sandboxed environments.
+
+- **Event-Driven Architecture**
+  Built on a push-based model using hooks and listeners for efficient, real-time message handling.
+
+- **Rate Limiting**
+  Includes built-in rate limiting with planned enhancements for more advanced control in upcoming releases.
+
+- **Flexible Storage & Encryption**
+  Supports multiple backends (SQLite, PostgreSQL, MySQL) with built-in AES-256-GCM encryption for secure message handling.
 
 ## Installation
 
