@@ -12,6 +12,7 @@ jobs:
   publish-testpypi:
     if: github.event.release.prerelease == true
     runs-on: ubuntu-latest
+    environment: testpypi
 
     steps:
       - uses: actions/checkout@v4
