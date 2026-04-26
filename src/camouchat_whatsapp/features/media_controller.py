@@ -149,14 +149,14 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
 
             abs_path = await asyncio.to_thread(os.path.abspath, p_str)
             await chooser.set_files(abs_path)
+            await self.page.wait_for_timeout(random.uniform(0.7, 1.4))
             if force:
                 await asyncio.sleep(random.uniform(0.6, 1.0))
-                try:
-                    send_btn = self.page.get_by_role("button", name=re.compile(r"send", re.I)).last
+                send_btn = self.page.get_by_role("button", name=re.compile(r"send", re.I)).last
+                if await send_btn.is_visible(timeout=random.uniform(2000,3000)):
                     await send_btn.click(timeout=4000)
                     self.log.debug("Media preview send button clicked.")
-                except Exception:
-                    # Fallback: simple Enter key press if button not found
+                else:
                     await self.page.keyboard.press("Enter")
                     self.log.debug("Media preview closed via Enter key.")
 

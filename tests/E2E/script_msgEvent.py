@@ -11,13 +11,13 @@ from camouchat_browser import (
 )
 from camouchat_core import FileTyped, MediaType, Platform
 
-from camouchat_whatsapp import Login, MediaController
+from camouchat_whatsapp import Login, MediaController, RegistryConfig
 
 
 async def main():
     # ── 1. Profile ─────────────────────────────────────────────────────────────
     pm = ProfileManager()
-    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="Work")
+    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="work")
 
     # ── 2. Browser ─────────────────────────────────────────────────────────────
     # browser_forge = BrowserForge() # Used to Generate Random Fingerprints for the browser ,
@@ -39,7 +39,7 @@ async def main():
 
     # ── 3. Login (reuses session) ───────────────────────────────────────────────
     # ui = WebSelectorConfig(page=page)
-    login = (Login(page=page),)  # UIConfig=ui) # default setup can take.
+    login = Login(page=page)  # UIConfig=ui) # default setup can take.
     await login.login(method=0)  # Auto Handles saved Persistence.
 
     # ── 4. Message event hook ───────────────────────────────────────────────────
@@ -55,8 +55,8 @@ async def main():
     media = MediaController(page=page, wapi=wapi, profile=profile)  # ,  UIConfig=ui,
 
     # Pass the Wapi Session object here
-    # Also if profile passed it it will auto save msgs to Storage.
-    @on_newMsg(wapi_session=wapi, profile=profile)
+    # Also if profile passed it will auto save msgs to Storage.
+    @on_newMsg(wapi_session=wapi, config=RegistryConfig(profile=profile))
     async def new_msg(msg: MessageModelAPI):
         print("\n --------- New Msg Arrived ───────────────────────────────────")
         print(msg, "\n")
