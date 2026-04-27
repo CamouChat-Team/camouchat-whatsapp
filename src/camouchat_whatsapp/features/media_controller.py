@@ -153,7 +153,7 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
             if force:
                 await asyncio.sleep(random.uniform(0.6, 1.0))
                 send_btn = self.page.get_by_role("button", name=re.compile(r"send", re.I)).last
-                if await send_btn.is_visible(timeout=random.uniform(2000,3000)):
+                if await send_btn.is_visible(timeout=random.uniform(2000, 3000)):
                     await send_btn.click(timeout=4000)
                     self.log.debug("Media preview send button clicked.")
                 else:

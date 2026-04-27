@@ -63,7 +63,8 @@ async def main():
         pass
     finally:
         # 1. Batch insert everything collected during the session
-        await storage._insert_batch_internally(msgs=msgs_batch)
+        await storage.enqueue_insert(msgs=msgs_batch)
+        await asyncio.sleep(3)  # minimum enqueue insert time.
 
         # 2. Fetch ONLY the specific messages we just saved using the new method
         db_msgs = await storage.get_messages_by_ids_async(message_ids=save_ids)

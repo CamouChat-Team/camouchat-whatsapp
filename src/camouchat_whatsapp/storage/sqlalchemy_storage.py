@@ -92,6 +92,7 @@ class SQLAlchemyStorage(StorageProtocol):
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
         self._writer_task: asyncio.Task | None = None
         self._running = False
+        self._flush_event = asyncio.Event()
         self._initialized_ = False
 
     @staticmethod
@@ -256,8 +257,16 @@ class SQLAlchemyStorage(StorageProtocol):
             return
 
         self._running = True
+        self._flush_event.clear()
         self._writer_task = asyncio.create_task(self._writer_loop())
         self.log.info("Background writer started.")
+
+    async def flush(self) -> None:
+        """Force an immediate flush of the batch queue."""
+        if not self._running:
+            return
+        self._flush_event.set()
+        await self.queue.put([])  # Wake up queue.get() immediately
 
     async def _writer_loop(self) -> None:
         """Background loop that consumes queue and writes batches."""
@@ -266,26 +275,45 @@ class SQLAlchemyStorage(StorageProtocol):
 
         while self._running:
             try:
+                now = asyncio.get_event_loop().time()
+                time_since_flush = now - last_flush
+                time_to_wait = max(0.1, self.flush_interval - time_since_flush)
+
                 try:
-                    msg = await asyncio.wait_for(self.queue.get(), timeout=self.flush_interval)
+                    msg = await asyncio.wait_for(self.queue.get(), timeout=time_to_wait)
+
+                    if msg is None:  # Shutdown sentinel
+                        self.queue.task_done()
+                        break
+
                     if isinstance(msg, list):
-                        batch.extend(msg)
+                        if msg:  # Ignore empty lists used as flush wakeups
+                            batch.extend(msg)
                     else:
                         batch.append(msg)
+
                     self.queue.task_done()
                 except TimeoutError:
                     pass
 
+                if not self._running:
+                    break
+
                 current_time = asyncio.get_event_loop().time()
-                should_flush = len(batch) >= self.batch_size or (
-                    batch and current_time - last_flush >= self.flush_interval
+                should_flush = (
+                    len(batch) >= self.batch_size
+                    or (batch and (current_time - last_flush) >= self.flush_interval)
+                    or self._flush_event.is_set()
                 )
 
                 if should_flush and batch:
                     await self._insert_batch_internally(batch)
                     batch.clear()
                     last_flush = current_time
+                    self._flush_event.clear()
 
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 self.log.error(f"Writer loop error: {e}", exc_info=True)
                 await asyncio.sleep(1)
@@ -294,10 +322,32 @@ class SQLAlchemyStorage(StorageProtocol):
         if batch:
             await self._insert_batch_internally(batch)
 
-    async def enqueue_insert(self, msgs: Sequence[MessageProtocol], **kwargs) -> None:
-        """Add messages to queue for batch insertion."""
+    async def enqueue_insert(
+        self, msgs: Sequence[MessageProtocol] | MessageProtocol, **kwargs
+    ) -> None:
+        """
+        Add messages to queue for batch insertion.
+
+        Parameters
+        ----------
+        msgs : Sequence[MessageProtocol] | MessageProtocol
+            Messages to insert.
+        **kwargs : dict
+            Optional arguments.
+        min_insert_time : float, optional
+            Minimum time to wait before inserting the messages.
+            If -1, the default flush interval is used.
+            we can change the flush interval via this runtime flag too.
+        """
+        min_insert_time: float = kwargs.get("min_insert_time", -1)
+        if min_insert_time >= 0:
+            self.flush_interval = min_insert_time
+
         if not msgs:
             return
+
+        if isinstance(msgs, MessageProtocol):
+            msgs = [msgs]
 
         for msg in msgs:
             await self.queue.put(msg)
@@ -583,11 +633,16 @@ class SQLAlchemyStorage(StorageProtocol):
     async def close_db(self, **kwargs) -> None:
         """Close connection and stop writer."""
         self._running = False
+        await self.queue.put(None)  # Wake up queue.get() for instant shutdown
 
         if self._writer_task:
-            self._writer_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._writer_task
+            try:
+                await asyncio.wait_for(self._writer_task, timeout=2.0)
+            except TimeoutError:
+                self.log.warning("Writer task shutdown timed out, cancelling.")
+                self._writer_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._writer_task
             self._writer_task = None
 
         if self._engine:

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.3] — Unreleased
 
 ### Added
+- added min_insert_time in the enqueue_insert method as kwargs param , can set the flush interval via this too.
+- Added `flush()` method to `SQLAlchemyStorage` for manual and immediate batch insertion.
+- Improved `SQLAlchemyStorage` background writer with adaptive timeout calculation to guarantee exact flush intervals.
+- Enhanced `SQLAlchemyStorage` shutdown logic (`close_db`) to instantly stop the background loop via sentinels without data loss.
 - Added smoke test script for JS synthetic clicks vs Camoufox physical humanized clicks.
 - Added `mentionList` parameter support to send mentions via `send_api_text()`.
 - fallback check for newsletter/channels in open_chat()
