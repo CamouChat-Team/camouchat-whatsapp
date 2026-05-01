@@ -9,15 +9,20 @@ from camouchat_browser import (
     CamoufoxBrowser,
     ProfileManager,
 )
-from camouchat_core import FileTyped, MediaType, Platform
+from camouchat_core import MediaType, Platform
 
-from camouchat_whatsapp import Login, MediaController, RegistryConfig
+from camouchat_whatsapp import FileTyped, Login, MediaController, RegistryConfig
+
+_session_msg_ids: list[str] = []
+_session_profile = None
 
 
 async def main():
+    global _session_profile
     # ── 1. Profile ─────────────────────────────────────────────────────────────
     pm = ProfileManager()
     profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="work")
+    _session_profile = profile
 
     # ── 2. Browser ─────────────────────────────────────────────────────────────
     # browser_forge = BrowserForge() # Used to Generate Random Fingerprints for the browser ,
@@ -39,7 +44,7 @@ async def main():
 
     # ── 3. Login (reuses session) ───────────────────────────────────────────────
     # ui = WebSelectorConfig(page=page)
-    login = Login(page=page)  # UIConfig=ui) # default setup can take.
+    login = Login(page=page, profile=profile)  # UIConfig=ui) # default setup can take.
     await login.login(method=0)  # Auto Handles saved Persistence.
 
     # ── 4. Message event hook ───────────────────────────────────────────────────
@@ -56,8 +61,10 @@ async def main():
 
     # Pass the Wapi Session object here
     # Also if profile passed it will auto save msgs to Storage.
-    @on_newMsg(wapi_session=wapi, config=RegistryConfig(profile=profile))
+    # if Encryption passed , it will encrypt the msg.body & add nonce in msg model.
+    @on_newMsg(wapi_session=wapi, config=RegistryConfig(profile=profile, store=True, encrypt=True))
     async def new_msg(msg: MessageModelAPI):
+        _session_msg_ids.append(msg.id_serialized)
         print("\n --------- New Msg Arrived ───────────────────────────────────")
         print(msg, "\n")
 
@@ -72,8 +79,28 @@ async def main():
         )
         success = False
 
+        # Decrypt to plain_body for cmd processing; msg stays encrypted for storage validation
+        plain_body = msg.body
+        if msg.encryption_nonce is not None and msg.body:
+            import base64 as _b64
+
+            from camouchat_core import KeyManager, MessageDecryptor
+
+            key_path = _session_profile.encryption.get("key_file") if _session_profile else None
+            if key_path:
+                with open(key_path, "rb") as _f:  # noqa: ASYNC230
+                    raw_key = KeyManager.decode_key_from_storage(_f.read().decode())
+                try:
+                    nonce_b = _b64.b64decode(msg.encryption_nonce)
+                    cipher_b = _b64.b64decode(msg.body)
+                    plain_body = MessageDecryptor(raw_key).decrypt_message(
+                        nonce_b, cipher_b, msg.id_serialized or None
+                    )
+                except Exception as _e:
+                    print(f"[!] Decryption failed: {_e}")
+
         # Process the msg Commands by some dummy commands.
-        if msg.body == "!ping":
+        if plain_body == "!ping":
             print(f"[*] Command triggered: !ping from {msg.jid_From}")
             # await replyObj.quote_only(message=msg)  # UI: Trigger the quote/reply bubble
             await interaction.send_api_text(
@@ -86,7 +113,7 @@ async def main():
             )
             success = True
 
-        elif msg.body == "!info":
+        elif plain_body == "!info":
             print(f"[*] Command triggered: !info from {msg.jid_From}")
             # Tests ChatModelAPI and dynamic metadata extraction
             # await replyObj.quote_only(message=msg)
@@ -106,7 +133,7 @@ async def main():
             )
             success = True
 
-        elif msg.body == "!me":
+        elif plain_body == "!me":
             print("[*] Command triggered: !me (Identity Extraction)")
             # Tests identity and sender objects
             sender_name = msg.author if chat.groupType != "DEFAULT" else chat.id_serialized
@@ -122,9 +149,9 @@ async def main():
             )
             success = True
 
-        elif msg.body and msg.body.startswith("!echo "):
+        elif plain_body and plain_body.startswith("!echo "):
             print("[*] Command triggered: !echo (Humanized Interaction)")
-            echo_text = msg.body.replace("!echo ", "")
+            echo_text = plain_body.replace("!echo ", "")
             await interaction.send_text(
                 message=msg,
                 text=f"Echo: {echo_text}",  # Type using manual/clipboard
@@ -133,7 +160,7 @@ async def main():
             )
             success = True
 
-        elif msg.body and msg.body == "!media":
+        elif plain_body == "!media":
             print("[*] Command triggered: !media — requesting test image upload")
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
@@ -212,3 +239,26 @@ if __name__ == "__main__":
         import traceback
 
         traceback.print_exc()
+    finally:
+        # printing DB messages
+        from camouchat_whatsapp.storage.queries import Query
+
+        async def fetch_and_print():
+            if not _session_msg_ids or not _session_profile:
+                print("\n[DB] No messages were processed in this session.")
+                return
+
+            query = Query(_session_profile)
+            msgs = await query.get_messages_by_ids_async(_session_msg_ids)
+            print(f"\n[DB] Retrieved {len(msgs)} messages tracked in this session:")
+            for i, m in enumerate(msgs, 1):
+                body = str(m.body)[:50].replace("\n", " ")
+                print(f" {i}. {m.msgtype} | FromMe: {m.fromMe} | Body: {body}...")
+
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(fetch_and_print())
+            loop.close()
+        except Exception as e:
+            print(f"[DB] Error fetching messages: {e}")

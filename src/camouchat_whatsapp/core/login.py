@@ -7,6 +7,7 @@ import random
 import weakref
 from logging import Logger, LoggerAdapter
 
+from camouchat_browser import ProfileInfo
 from camouchat_core import LoginProtocol
 from playwright.async_api import (
     Error as PlaywrightError,
@@ -20,8 +21,6 @@ from playwright.async_api import (
 )
 
 from camouchat_whatsapp.exceptions import LoginError
-
-# Todo, add logger later
 from camouchat_whatsapp.logger import w_logger
 
 from .web_ui_config import WebSelectorConfig
@@ -45,18 +44,37 @@ class Login(LoginProtocol):
     def __init__(
         self,
         page: Page,
+        profile: ProfileInfo,
         ui_config: WebSelectorConfig | None = None,
         log: Logger | LoggerAdapter | None = None,
         **kwargs,
     ):
-        if hasattr(self, "_initialized") and self._initialized:
-            return
         if page is None:
             raise ValueError("page must not be None")
 
-        ui_config = ui_config or kwargs.pop("UIConfig", None)
+        if profile is None:
+            raise ValueError("profile must not be None")
+
+        if isinstance(profile, ProfileInfo) is False:
+            raise ValueError("profile must be an instance of ProfileInfo")
+
+        if isinstance(page, Page) is False:
+            raise ValueError("page must be an instance of Page")
+
+        if hasattr(self, "_initialized") and self._initialized:
+            return
+
+        if profile.is_active:
+            w_logger.warning(
+                "Already logged in for this profile. To create a new account login consider using a diff profile"
+            )
+
+        if ui_config is None:
+            ui_config = WebSelectorConfig(page=page)
+
         self.page = page
-        self.ui_config = ui_config or WebSelectorConfig(page=page)
+        self.ui_config = ui_config
+        self.profile = profile
         self.log = log or w_logger
         self._initialized = True
 

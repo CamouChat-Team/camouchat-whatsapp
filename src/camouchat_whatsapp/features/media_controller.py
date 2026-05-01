@@ -7,12 +7,13 @@ import os
 import random
 import re
 import weakref
+from dataclasses import dataclass
 from logging import Logger, LoggerAdapter
 from pathlib import Path
 from typing import Any
 
 from camouchat_browser import ProfileInfo
-from camouchat_core import FileTyped, MediaControllerProtocol, MediaType
+from camouchat_core import MediaControllerProtocol, MediaType
 from playwright.async_api import (
     FileChooser,
     Locator,
@@ -28,20 +29,29 @@ from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_whatsapp.exceptions import WhatsAppError, WhatsappMediaError
 from camouchat_whatsapp.logger import w_logger
 
-# Todo add logger later.
+
+@dataclass(frozen=True)
+class FileTyped:
+    """Standard file metadata for media operations."""
+
+    uri: str
+    name: str
+    mime_type: str | None = None
+    size_bytes: int | None = None
 
 
 # ── Media-type → category bucket ──────────────────────────────────────────────
-_WA_TYPE_TO_CATEGORY: dict[str, str] = {
-    "image": "image",
-    "sticker": "image",
-    "video": "video",
-    "gif": "video",
-    "audio": "audio",
-    "ptt": "audio",
-    "document": "document",
-    "vcard": "document",
-    "product": "document",
+_WA_TYPE_TO_CATEGORY: dict[str, MediaType] = {
+    "image": MediaType.IMAGE,
+    "sticker": MediaType.IMAGE,
+    "video": MediaType.VIDEO,
+    "gif": MediaType.VIDEO,
+    "audio": MediaType.AUDIO,
+    "ptt": MediaType.AUDIO,
+    "document": MediaType.DOCUMENT,
+    "vcard": MediaType.DOCUMENT,
+    "product": MediaType.DOCUMENT,
+    # Checks for Video Note type coming in message.
 }
 
 # Category → ProfileInfo attribute name for the save directory

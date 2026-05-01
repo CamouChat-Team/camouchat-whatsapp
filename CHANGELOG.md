@@ -6,9 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+
 ## [0.7.3] — Unreleased
 
 ### Added
+
+- added on_encrypt hook in the `RegisteryConfig()` , it now encrypts the messages at runtime.
+- added storage/query.py , it contains all the queries for the database , additionally adding much flexible queries to fetch data.
 - added min_insert_time in the enqueue_insert method as kwargs param , can set the flush interval via this too.
 - Added `flush()` method to `SQLAlchemyStorage` for manual and immediate batch insertion.
 - Improved `SQLAlchemyStorage` background writer with adaptive timeout calculation to guarantee exact flush intervals.
@@ -19,13 +23,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added storage decorator @on_storage inside @on_newMsg decorator , added RegistryConfig to handle these inside @on_newMsg.
 
 ### Fixed
-- Fixed `open_chat` reliability under heavy load using enhanced retry logic, mouse micro-corrections, and virtualized `scrollIntoView` (fully supports headless/Xvfb).
+
+- test/E2E/ scripts fixed with new changes.
+- fixed `WapiSession` to have `page` based registery.
+- fixed `login` to have profile based login to stop redundant calls or same profile and browser but diff page call to whatsapp.
+- Added vairable `key_typing` in `send_api_text()` method to enable or disable key-typing.This fixes the issue of 0 keyup/keydown events.
+- Fixed `open_chat()` reliability under heavy load using enhanced retry logic, mouse micro-corrections, and virtualized `scrollIntoView` (fully supports headless/Xvfb).
 - Hardened API stealth engine bridge execution, enhanced _evaluate_stealth with success , error dict, and some tweaks.
 - SqlalchmeyStorage is now uses new ProfileManager Structure , and dialect can be changed with db_credendials and much more control over database.
 - scripts added and fixed in order to test new Hooks.
 - smoke test script added in order to test new hooks.
 - on_newMsg now adds RegistryConfig which can handle these inside @on_newMsg and RegistryConfig can fetch the storage.
 - giving profile in the Registry now send msg to be automatically to be in storage saved.
+
+### Changed
+
+- FileTyped is added in native now , no more core dependency
+- `test/E2E/script_msgEvent.py` updated with latest hooks and code.
+
+---
 
 ## [0.7.2] — 2026-04-18
 

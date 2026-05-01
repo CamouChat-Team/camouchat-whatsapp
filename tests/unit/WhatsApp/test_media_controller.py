@@ -7,6 +7,7 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
+from camouchat_core import MediaType
 from playwright.async_api import (
     FileChooser,
     Locator,
@@ -16,10 +17,9 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
-from camouchat_whatsapp import FileTyped, MediaType
-from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
+from camouchat_whatsapp.core import WebSelectorConfig
 from camouchat_whatsapp.exceptions import WhatsappMediaError
-from camouchat_whatsapp.features.media_controller import MediaController
+from camouchat_whatsapp.features.media_controller import FileTyped, MediaController
 
 # ============================================================================
 # FIXTURES
