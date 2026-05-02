@@ -191,7 +191,7 @@ class Query:
             stmt = delete(Message).where(Message.id_serialized.in_(message_ids))
             result = await session.execute(stmt)
             await session.commit()
-            return result.rowcount
+            return getattr(result, "rowcount", 0)
 
     async def get_decrypted_messages_async(
         self,

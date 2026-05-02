@@ -87,6 +87,8 @@ def on_newMsg(
                 storage_decorator = on_storage(config.profile)
                 handler = storage_decorator(handler)
             if config.encrypt:
+                if config.profile is None:
+                    raise ValueError("@on_newMsg: 'encrypt=True' requires a valid profile.")
                 encrypt_decorator = on_encrypt(config.profile)
                 handler = encrypt_decorator(handler)
 

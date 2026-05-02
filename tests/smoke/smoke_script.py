@@ -678,7 +678,7 @@ async def main() -> None:
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
 
-    login = Login(page=page)
+    login = Login(page=page, profile=profile)
     await login.login(method=0)
 
     wapi = WapiWrapper(page=page)

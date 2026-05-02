@@ -64,7 +64,8 @@ async def main():
     # if Encryption passed , it will encrypt the msg.body & add nonce in msg model.
     @on_newMsg(wapi_session=wapi, config=RegistryConfig(profile=profile, store=True, encrypt=True))
     async def new_msg(msg: MessageModelAPI):
-        _session_msg_ids.append(msg.id_serialized)
+        if msg.id_serialized:
+            _session_msg_ids.append(msg.id_serialized)
         print("\n --------- New Msg Arrived ───────────────────────────────────")
         print(msg, "\n")
 

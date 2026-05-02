@@ -38,8 +38,8 @@ def on_encrypt(profile: ProfileInfo) -> Callable:
         else:
             raw_key = KeyManager.generate_random_key()
             if key_path:
-                with open(key_path, "wb") as f:
-                    f.write(KeyManager.encode_key_for_storage(raw_key).encode())
+                with open(key_path, "wb") as fw:
+                    fw.write(KeyManager.encode_key_for_storage(raw_key).encode())
                 profile.encryption["enabled"] = True
                 profile.encryption["created_at"] = datetime.now(UTC).isoformat()
             else:
@@ -72,9 +72,9 @@ def on_encrypt(profile: ProfileInfo) -> Callable:
             )
 
         @functools.wraps(func)
-        async def register(*args, **kwargs):
+        async def register(*args: Any, **kwargs: Any) -> Any:
             bound = sig.bind(*args, **kwargs)
-            msg_obj: MessageProtocol = bound.arguments.get(msg_param_name)
+            msg_obj: MessageProtocol = bound.arguments.get(msg_param_name)  # type: ignore[assignment]
 
             if msg_obj and msg_obj.body:
                 # Use the cached encryptor instance
@@ -83,7 +83,7 @@ def on_encrypt(profile: ProfileInfo) -> Callable:
                 )
                 # Convert bytes to base64 string for JSON/DB storage
                 msg_obj.body = KeyManager.encode_key_for_storage(encrypted_bytes)
-                msg_obj.encryption_nonce = KeyManager.encode_key_for_storage(nonce)
+                msg_obj.encryption_nonce = KeyManager.encode_key_for_storage(nonce)  # type: ignore[assignment]
 
             return await func(*args, **kwargs)
 

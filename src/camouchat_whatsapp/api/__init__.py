@@ -6,7 +6,6 @@ Managers :
     - CoreBridge
 """
 
-from typing import Self
 from weakref import WeakKeyDictionary
 
 from playwright.async_api import Page
@@ -33,8 +32,9 @@ class WapiSession:
     """
 
     _instances: WeakKeyDictionary[Page, "WapiSession"] = WeakKeyDictionary()
+    _initialized: bool = False
 
-    def __new__(cls, page: Page) -> Self:
+    def __new__(cls, page: Page) -> "WapiSession":
         if page in cls._instances:
             return cls._instances[page]
 
