@@ -55,12 +55,6 @@ class Login(LoginProtocol):
         if profile is None:
             raise ValueError("profile must not be None")
 
-        if isinstance(profile, ProfileInfo) is False:
-            raise ValueError("profile must be an instance of ProfileInfo")
-
-        if isinstance(page, Page) is False:
-            raise ValueError("page must be an instance of Page")
-
         if hasattr(self, "_initialized") and self._initialized:
             return
 

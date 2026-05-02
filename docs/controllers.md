@@ -23,12 +23,13 @@ A configuration object that defines CSS selectors and timeouts for the WhatsApp 
 ## `InteractionController`
 Provides both API-level and humanized browser-level message actions:
 
-- **`send_api_text(chat_id, text, quoted_msg_id=None, mention_list=None)`**: Sends a plain-text message via the internal WA-JS API (zero DOM interaction, stealth-native). Pass `mention_list=["919876543210@c.us"]` to tag contacts.
+- **`send_api_text(chat_id, text, quoted_msg_id=None, mentionList=None)`**: Sends a plain-text message via the internal WA-JS API (zero DOM interaction, stealth-native).
+  - `mentionList=["919876543210@c.us"]`: Tag contacts in the message. Stochastic key-typing telemetry runs automatically (~60% of calls).
 
-  > ⚠️ **mention_list must be exact.** Every JID in `mention_list` must also appear as `@number` in the message `text`. WhatsApp's backend cross-validates the mention payload against the message body — a mismatch (e.g. mentioning a JID not present in the text, or vice versa) creates a suspicious signal that can flag the session. Always keep `mention_list` and `@mentions` in the text in sync.
+  > ⚠️ **mentionList must be exact.** Every JID in `mentionList` must also appear as `@number` in the message `text`. WhatsApp's backend cross-validates the mention payload against the message body — a mismatch (e.g. mentioning a JID not present in the text, or vice versa) creates a suspicious signal that can flag the session. Always keep `mentionList` and `@mentions` in the text in sync.
 
 - **`send_text(message, text, quote=False, send=True)`**: Types text into the WhatsApp Web input field using humanized keyboard simulation. Optionally triggers a quote bubble and sends.
-- **`open_chat(chat)`**: Navigates the browser to a specific chat. Skips newsletter/channel JIDs (`"@newsletter"`).
+- **`open_chat(chat)`**: Navigates the browser to a specific chat. Automatically detects and skips newsletter/channel JIDs (`"@newsletter"`) with fallback reliability.
 
 ## `MediaController`
 Handles media workflows via the WA-JS CDN bridge:

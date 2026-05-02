@@ -7,6 +7,7 @@ import logging
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from camouchat_browser import ProfileInfo
 from playwright.async_api import (
     BrowserContext,
     Locator,
@@ -44,8 +45,15 @@ def mock_ui_config():
 
 
 @pytest.fixture
-def login_instance(mock_page, mock_ui_config, mock_logger):
-    return Login(page=mock_page, ui_config=mock_ui_config, log=mock_logger)
+def mock_profile():
+    profile = Mock(spec=ProfileInfo)
+    profile.is_active = False
+    return profile
+
+
+@pytest.fixture
+def login_instance(mock_page, mock_profile, mock_ui_config, mock_logger):
+    return Login(page=mock_page, profile=mock_profile, ui_config=mock_ui_config, log=mock_logger)
 
 
 # ============================================================================
@@ -54,9 +62,9 @@ def login_instance(mock_page, mock_ui_config, mock_logger):
 
 
 @pytest.mark.asyncio
-async def test_init_page_none(mock_logger, mock_ui_config):
+async def test_init_page_none(mock_logger, mock_profile, mock_ui_config):
     with pytest.raises(ValueError, match="page must not be None"):
-        Login(page=None, ui_config=mock_ui_config, log=mock_logger)
+        Login(page=None, profile=mock_profile, ui_config=mock_ui_config, log=mock_logger)
 
 
 @pytest.mark.asyncio

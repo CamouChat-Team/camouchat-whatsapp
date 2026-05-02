@@ -9,13 +9,19 @@ Supports:
 - **PostgreSQL** via `asyncpg`
 
 ```python
-import asyncio
 from camouchat_whatsapp import SQLAlchemyStorage
+from camouchat_browser import ProfileManager
 
-queue = asyncio.Queue()
-storage = SQLAlchemyStorage(queue=queue, database_url="sqlite+aiosqlite:///messages.db")
+pm = ProfileManager()
+profile = pm.create_profile(platform=..., profile_id="work")
+
+storage = SQLAlchemyStorage.from_profile(profile)
 await storage.start()  # init_db + create_table + start_writer
 await storage.enqueue_insert([message_obj])  # enqueue for async batch write
+
+# 0.7.3+: Manual flush and runtime interval control
+await storage.flush()  # immediate batch write
+await storage.enqueue_insert(message_obj, min_insert_time=5.0)  # override flush interval to 5s
 ```
 
 ### Credential-Based Dialect (0.7.3+)
@@ -85,56 +91,30 @@ db_credentials = {
 }
 ```
 
-## `MessageFilter`
-A configurable gating layer applied before any message reaches a handler or storage.
 
-Common filter rules:
-- `allow_from_me`: Include or exclude messages sent by the bot itself.
-- Rate limiting: Cap incoming events per second to prevent processing floods.
+## Decorator Pipeline
 
-```python
-from camouchat_whatsapp import MessageFilter
+The `RegistryConfig`, `@on_newMsg`, `@on_storage`, and `@on_encrypt` decorators form the real-time ingestion pipeline. See **[event_arch.md](event_arch.md)** for full documentation.
 
-# Rate-limit: max 10 messages per 60-second window
-msg_filter = MessageFilter(Max_Messages_Per_Window=10, Window_Seconds=60)
-passed = msg_filter.apply(msgs=[msg])  # returns [] if rate-limited, [msg] if delivered
-```
-
-## `RegistryConfig` (0.7.3+)
-A configuration object passed to `@on_newMsg` that wires a storage backend to the message hook. When a `profile` is provided, all incoming messages are **automatically persisted** — no manual `enqueue_insert` needed.
+## `Query` (Advanced Retrieval)
+The `Query` class provides high-level, flexible methods for fetching and searching messages without writing raw SQL.
 
 ```python
-from camouchat_whatsapp import RegistryConfig, SQLAlchemyStorage
+from camouchat_whatsapp.storage.queries import Query
 
-storage = SQLAlchemyStorage.from_profile(profile)
-registry = RegistryConfig(profile=profile, storage=storage)
+query = Query(profile=profile)
+
+# Retrieval
+all_msgs = await query.get_all_messages()
+chat_msgs = await query.get_messages_by_chat(chat_id="...", limit=50)
+
+# Search
+search_results = await query.search_messages_by_text("hello")
+
+# Checks & Meta
+exists = await query.is_msgs_exist(msg_obj)
+total = await query.total_messages()
+
+# Decryption on-the-fly
+decrypted_msgs = await query.get_decrypted_messages_async(key=my_aes_key)
 ```
-
-## `on_newMsg` Decorator
-Register a callback invoked whenever a new message passes all active filters.
-
-```python
-from camouchat_whatsapp import on_newMsg, WapiSession, RegistryConfig
-
-wapi = WapiSession(page=page)
-registry = RegistryConfig(profile=profile, storage=storage)
-
-@on_newMsg(wapi_session=wapi, registry=registry)
-async def handle(msg):
-    print(f"New message from {msg.jid_From}: {msg.body}")
-
-await handle()  # registers handler + bridge; auto-saves msgs via registry
-```
-
-## `@on_storage` Decorator (0.7.3+)
-A nested decorator available inside `@on_newMsg` callbacks for per-handler storage control:
-
-```python
-@on_newMsg(wapi_session=wapi, registry=registry)
-@on_storage(storage=storage)
-async def handle(msg):
-    # msg is already persisted before this handler runs
-    print(f"Saved & received: {msg.body}")
-```
-
-> **Note:** If `profile` is given to `RegistryConfig`, messages are auto-persisted globally. `@on_storage` is for per-handler overrides or a different backend.

@@ -51,7 +51,6 @@ def on_encrypt(profile: ProfileInfo) -> Callable:
     def decorator(
         func: Callable[..., Coroutine[Any, Any, Any]],
     ) -> Callable[..., Coroutine[Any, Any, Any]]:
-
         sig = inspect.signature(func)
         msg_param_name = None
 

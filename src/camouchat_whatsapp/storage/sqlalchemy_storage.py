@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 from collections.abc import Sequence
 from logging import Logger, LoggerAdapter
+from typing import Any
 
 from camouchat_browser import DirectoryManager, ProfileInfo
 from camouchat_core import MessageProtocol, MessageType, StorageProtocol
@@ -488,6 +489,53 @@ class SQLAlchemyStorage(StorageProtocol):
         await self.close_db()
         return False
 
-    async def get_profile_info(self) -> ProfileInfo:
-        """Return the profile info used to initialize the storage."""
-        return self.profile
+    async def get_all_messages_async(
+        self, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Retrieve all messages from storage asynchronously."""
+        factory = self._get_session_factory()
+        from sqlalchemy import select
+
+        async with factory() as session:
+            stmt = select(Message).order_by(Message.id.desc()).limit(limit).offset(offset)
+            result = await session.execute(stmt)
+            messages = result.scalars().all()
+            return [msg.to_dict() for msg in messages]
+
+    async def check_message_if_exists_async(self, msg_id: str, **kwargs) -> bool:
+        """Check if a message exists by ID asynchronously."""
+        factory = self._get_session_factory()
+        from sqlalchemy import select
+
+        async with factory() as session:
+            stmt = select(Message.id_serialized).where(Message.id_serialized == msg_id)
+            result = await session.execute(stmt)
+            return result.scalar() is not None
+
+    async def get_messages_by_chat(
+        self, chat_id: str, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Get messages filtered by chat id with pagination."""
+        factory = self._get_session_factory()
+        from sqlalchemy import select
+
+        async with factory() as session:
+            stmt = (
+                select(Message)
+                .where(Message.chat_id == chat_id)
+                .order_by(Message.id.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            messages = result.scalars().all()
+            return [msg.to_dict() for msg in messages]
+
+    def check_message_if_exists(self, msg_id: str, **kwargs) -> bool:
+        """Check if a message exists by ID (sync - not recommended)."""
+        # This is just to satisfy the protocol if needed, but it might not work well with async engine
+        raise NotImplementedError("Use check_message_if_exists_async")
+
+    def get_all_messages(self, **kwargs) -> list[dict[str, Any]]:
+        """Retrieve all messages from storage (sync - not recommended)."""
+        raise NotImplementedError("Use get_all_messages_async")

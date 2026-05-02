@@ -181,7 +181,7 @@ if result["success"]:
 
 > ⛔ **Do not use this directly.** This low-level method is internally patched by `InteractionController`. Calling it directly bypasses mention handling, stealth timing, and quote support.
 >
-> **Use `InteractionController.send_api_text()` instead** — it wraps this with the full stealth-grade send pipeline including `mention_list` support and proper session context.
+> **Use `InteractionController.send_api_text()` instead** — it wraps this with the full stealth-grade send pipeline including `mentionList` support and proper session context.
 
 ```python
 # ✗ Avoid:
@@ -189,5 +189,5 @@ await msg_mgr.send_text_message("91XXXX@c.us", "Hello")
 
 # ✓ Correct:
 from camouchat_whatsapp import InteractionController
-await ctrl.send_api_text(chat_id="91XXXX@c.us", text="Hello")
+await ctrl.send_api_text(chat_id="91XXXX@c.us", text="Hello @mention", mentionList=["91XXXX@c.us"])
 ```

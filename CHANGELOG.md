@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `Agent.md` for agents.
 - added on_encrypt hook in the `RegisteryConfig()` , it now encrypts the messages at runtime.
 - added storage/query.py , it contains all the queries for the database , additionally adding much flexible queries to fetch data.
 - added min_insert_time in the enqueue_insert method as kwargs param , can set the flush interval via this too.

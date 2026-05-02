@@ -23,16 +23,22 @@ Handles the lifecycle of `ChatModelAPI` objects. Provides lookup, caching, and p
 
 ## Usage Example
 
-The `MessageApiManager` is instantiated by `WapiSession` internally. If you need it standalone:
+The `MessageApiManager` is instantiated by `WapiSession` internally.
 
 ```python
-from camouchat_whatsapp import WapiSession, SQLAlchemyStorage, MessageFilter
+from camouchat_whatsapp import WapiSession, RegistryConfig, on_newMsg
 import asyncio
 
-queue = asyncio.Queue()
-storage = SQLAlchemyStorage(queue=queue, database_url="sqlite+aiosqlite:///messages.db")
-msg_filter = MessageFilter(Max_Messages_Per_Window=20, Window_Seconds=60)
+# Attach via WapiSession
+wapi = WapiSession(page=page)
+await wapi.start()
 
-# Attach via WapiSession (preferred)
-wapi = WapiSession(page=page, storage_obj=storage, filter_obj=msg_filter)
+# Use RegistryConfig for storage and encryption (Recommended)
+registry = RegistryConfig(profile=profile, store=True, encrypt=True)
+
+@on_newMsg(wapi, config=registry)
+async def my_handler(msg):
+    print(f"Handled: {msg.body}")
+
+await my_handler() # Activate registration
 ```
