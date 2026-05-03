@@ -14,7 +14,7 @@ High-stealth WhatsApp automation plugin for the CamouChat ecosystem. Built on to
       <img src="https://static.pepy.tech/personalized-badge/camouchat-whatsapp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="PyPI Downloads" />
   </a>
   <a href="https://github.com/CamouChat-Team/camouchat-whatsapp/releases">
-      <img src="https://img.shields.io/github/v/release/CamouChat-Team/camouchat-whatsapp?label=Release&color=blue" alt="GitHub Release" />
+      <img src="https://img.shields.io/github/v/release/CamouChat-Team/camouchat-whatsapp?include_prereleases&label=Release&color=blue" alt="GitHub Release" />
   </a>
   <a href="https://opensource.org/licenses/MIT">
       <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
