@@ -1,4 +1,5 @@
-# Storage & Filtering
+# Storage
+
 
 ## `SQLAlchemyStorage`
 The primary persistence layer for messages and chats. Uses `SQLAlchemy` with `aiosqlite` for fully async, non-blocking database operations.

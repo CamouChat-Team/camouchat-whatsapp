@@ -14,7 +14,6 @@ Represents a WhatsApp chat thread — group or individual. Contains participant 
 
 ### `MessageApiManager`
 Processes raw `MessageModelAPI` events. Responsible for:
-- Filtering by `MessageFilter` rules
 - Persisting to `SQLAlchemyStorage`
 - Dispatching to registered `on_newMsg` handlers
 

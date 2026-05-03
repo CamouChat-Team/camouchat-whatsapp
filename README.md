@@ -201,9 +201,9 @@ if __name__ == "__main__":
 | [Message API Manager](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/docs/msg_api.md) | `get_messages`, `extract_media`, push listener |
 | [Controllers](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/docs/controllers.md) | `InteractionController`, `MediaController`, `send_api_text` |
 | [Event Architecture](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/docs/event_arch.md) | `@on_newMsg`, `@on_storage`, `@on_encrypt` decorator pipeline |
-| [Storage & Filtering](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/docs/storage.md) | `SQLAlchemyStorage`, dialect config, `Query` retrieval layer |
+| [Storage](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/docs/storage.md) | `SQLAlchemyStorage`, dialect config, `Query` retrieval layer |
 | [API Models](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/docs/api_models.md) | `ChatModelAPI`, `MessageModelAPI` field reference |
-| [Agent Reference](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/docs/Agent.md) | 🤖 Full API surface + rules for AI agents / LLM tooling |
+| [Agent Reference](https://github.com/CamouChat-Team/camouchat-whatsapp/blob/main/Agent.md) | 🤖 Full API surface + rules for AI agents / LLM tooling |
 | [Core SDK](https://github.com/CamouChat-Team/camouchat-core) | `camouchat-core` protocol definitions |
 | [Browser Plugin](https://github.com/CamouChat-Team/camouchat-browser) | `ProfileManager`, `BrowserConfig`, `CamoufoxBrowser` |
 
