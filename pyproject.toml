@@ -1,6 +1,6 @@
 [project]
 name = "camouchat-whatsapp"
-version = "0.7.3rc2"
+version = "0.7.3"
 description = "High-stealth WhatsApp Web automation plugin for CamouChat. WA-JS powered, async-first, multi-account with AES-256 encrypted storage."
 readme = "README.md"
 authors = [
