@@ -21,7 +21,7 @@ jobs:
         with:
           enable-cache: true
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v6
         with:
           python-version-file: "pyproject.toml"
 
@@ -51,7 +51,7 @@ jobs:
         with:
           enable-cache: true
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
