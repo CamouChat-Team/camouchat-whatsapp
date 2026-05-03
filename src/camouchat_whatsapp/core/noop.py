@@ -5,22 +5,6 @@ from typing import Any
 
 from camouchat_core import MessageProtocol, StorageProtocol
 
-from camouchat_whatsapp.filters import MessageFilter
-
-
-# -----------------------------
-# NoOp filters
-# -----------------------------
-class NoOpMessageFilter(MessageFilter):
-    """No-op filter → returns messages unchanged."""
-
-    def __init__(self):
-        # Intentionally avoided to call super() to avoid unnecessary init
-        pass
-
-    def apply(self, msgs):
-        return msgs
-
 
 # -----------------------------
 # NoOp Storage

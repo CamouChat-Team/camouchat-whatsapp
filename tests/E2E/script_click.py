@@ -30,7 +30,7 @@ async def main():
     page = await browser.get_page()
 
     # ── 3. Login (reuses session) ───────────────────────────────────────────────
-    login = Login(page=page)
+    login = Login(page=page, profile=profile)
     await login.login(method=0)  # Auto Handles saved Persistence.
 
     # ── 4. Click Test ───────────────────────────────────────────────────────────

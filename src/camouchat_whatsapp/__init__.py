@@ -24,8 +24,7 @@ from .core import Login, WebSelectorConfig
 
 # Utils
 from .decorator import RegistryConfig, on_newMsg
-from .features import FileTyped, InteractionController, MediaController, MediaType
-from .filters import MessageFilter
+from .features import FileTyped, InteractionController, MediaController
 
 # Infrastructure
 from .storage import SQLAlchemyStorage
@@ -45,12 +44,10 @@ __all__ = [
     "WebSelectorConfig",
     "MediaController",
     "InteractionController",
-    "MediaType",
     "FileTyped",
     # Infra
     "SQLAlchemyStorage",
     # Utils
     "on_newMsg",
     "RegistryConfig",
-    "MessageFilter",
 ]

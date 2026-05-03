@@ -1,6 +1,6 @@
 [project]
 name = "camouchat-whatsapp"
-version = "0.7.3rc1"
+version = "0.7.3rc2"
 description = "High-stealth WhatsApp Web automation plugin for CamouChat. WA-JS powered, async-first, multi-account with AES-256 encrypted storage."
 readme = "README.md"
 authors = [
@@ -54,7 +54,7 @@ classifiers = [
 dependencies = [
     "aiosqlite>=0.22.1",
     "camouchat-browser>=0.7.1",
-    "camouchat-core>=0.7.1",
+    "camouchat-core>=0.7.3",
     "filelock>=3.25.2",
     "playwright>=1.58.0",
     "pyperclip>=1.11.0",

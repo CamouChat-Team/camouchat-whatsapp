@@ -113,6 +113,18 @@ class InteractionController(InteractionControllerProtocol):
             await inputBox.click(timeout=5000)  # Telemetry
             self.log.debug("Msg Box Clicked.")
 
+            # Key-press telemetry: stochastic — fires ~60% of messages, types 1-N random chars.
+            # Variable rate prevents ML systems from detecting a fixed pattern.
+            if text and random.random() < 0.6:
+                n_chars = random.randint(1, min(len(text.split()[0]), 5)) if text.split() else 0
+                snippet = text[:n_chars]
+                if snippet:
+                    await self.page.keyboard.type(snippet, delay=random.randint(55, 130))
+                    await asyncio.sleep(random.uniform(0.05, 0.35))
+                    await self.page.keyboard.press("Control+A")
+                    await self.page.keyboard.press("Backspace")
+                    self.log.debug("Key telemetry: keystroke activity registered.")
+
             if not chat_id:
                 raise WhatsAppInteractionError("Could not determine active chat ID from bridge.")
 

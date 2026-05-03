@@ -31,6 +31,7 @@ tests/learn
 
 docs/test*.py
 docs/smoke*.py
+docs/internal_wa_hierarchy.md
 camouchat/BrowserManager/profile_context.py
 docs/Logger
 
@@ -38,6 +39,7 @@ wget-*
 
 ignore/
 .codex
+src/camouchat_whatsapp/filters/
 
 # Secrets and environment
 .env
@@ -54,3 +56,4 @@ secrets/
 # OS files
 .DS_Store
 Thumbs.db
+todo.txt

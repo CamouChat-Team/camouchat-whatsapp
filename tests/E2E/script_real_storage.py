@@ -38,7 +38,7 @@ async def main():
     config = BrowserConfig.from_dict({"platform": Platform.WHATSAPP, "headless": False})
     browser = CamoufoxBrowser(config=config, profile=profile)
     page = await browser.get_page()
-    login = Login(page=page)
+    login = Login(page=page, profile=profile)
     await login.login(method=0)
 
     # ── Event Hook ─────────────────────────────────────────────────────────
@@ -63,32 +63,36 @@ async def main():
         pass
     finally:
         # 1. Batch insert everything collected during the session
-        await storage._insert_batch_internally(msgs=msgs_batch)
+        await storage.enqueue_insert(msgs=msgs_batch)
+        await asyncio.sleep(3)  # minimum enqueue insert time.
 
-        # 2. Fetch ONLY the specific messages we just saved using the new method
-        db_msgs = await storage.get_messages_by_ids_async(message_ids=save_ids)
+        # 2. Fetch ONLY the specific messages we just saved using the Query layer
+        from camouchat_whatsapp.storage.queries import Query
+
+        query = Query(profile)
+        db_msgs = await query.get_messages_by_ids_async(save_ids)
 
         print("\n\n" + "=" * 50)
         print(f"DATABASE VERIFICATION: {len(db_msgs)} records retrieved by target IDs.")
         print("=" * 50)
 
         for msg in db_msgs:
-            body = msg.get("body") or ""
+            body = msg.body or ""
             body_disp = f"{body[:40]}...[truncated {len(body)} chars]" if len(body) > 100 else body
 
             print("\n--- Found DB Record ---")
-            print(f"ID     : {msg.get('id_serialized')}")
-            print(f"DB Id  : {msg.get('id')}")
-            print(f"Type   : {msg.get('msgtype')}")
+            print(f"ID     : {msg.id_serialized}")
+            print(f"DB Id  : {msg.id}")
+            print(f"Type   : {msg.msgtype}")
             print(f"Body   : {body_disp}")
-            print(f"FromMe : {msg.get('fromMe')}")
-            print(f"ChatID : {msg.get('chat_id')}")
-            print(f"Time   : {msg.get('timestamp')}")
-            print(f"Created: {msg.get('created_at')}")
-            print(f"E-Nonce: {msg.get('encryption_nonce')}")
+            print(f"FromMe : {msg.fromMe}")
+            print(f"ChatID : {msg.chat_id}")
+            print(f"Time   : {msg.timestamp}")
+            print(f"Created: {msg.created_at}")
+            print(f"E-Nonce: {msg.encryption_nonce}")
             print("-----------------------")
 
-        await CamoufoxBrowser.close_browser_by_profile(profile=profile)
+        await CamoufoxBrowser.close_browser_by_profile(profile_id="work")
 
 
 if __name__ == "__main__":
@@ -96,5 +100,7 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nStopped by user.")
+    except BrokenPipeError:
+        pass  # Browser subprocess closed pipes on Ctrl+C — expected.
     except Exception:
         traceback.print_exc()

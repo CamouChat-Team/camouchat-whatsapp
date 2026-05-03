@@ -6,6 +6,8 @@ Managers :
     - CoreBridge
 """
 
+from weakref import WeakKeyDictionary
+
 from playwright.async_api import Page
 
 from camouchat_whatsapp.logger import w_logger
@@ -24,17 +26,30 @@ __all__ = [
 ]
 
 
-# todo add logger later
-
-
 class WapiSession:
     """
     WapiSession maintains all the other Core Internal Managers.
     """
 
-    # Todo , Initiate WapiSession with weakref to maintain Obj Singleton
+    _instances: WeakKeyDictionary[Page, "WapiSession"] = WeakKeyDictionary()
+    _initialized: bool = False
+
+    def __new__(cls, page: Page) -> "WapiSession":
+        if page in cls._instances:
+            return cls._instances[page]
+
+        instance = super().__new__(cls)
+        cls._instances[page] = instance
+        return instance
+
     def __init__(self, page: Page):
+        if hasattr(self, "_initialized") and self._initialized:
+            return
+
         self.page = page
+        self._initialized = True
+
+        w_logger.info(f"WapiSession initialized for page: {id(page)}")
         self.bridge = WapiWrapper(page)
         self.chat_manager = ChatApiManager(self.page, self.bridge)
         self.message_manager = MessageApiManager(self.bridge)
@@ -55,7 +70,7 @@ class WapiSession:
         else:
             self.log.error("""
             Wapi Session failed to establish the connection. Please consider restarting the browser.
-            If issuer persists consider creating a new profile.
+            If issue persists, delete current one, remove from whatsapp linked account and create a new profile.
             """)
 
     async def stop(self):

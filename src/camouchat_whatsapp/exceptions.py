@@ -17,12 +17,6 @@ class WhatsAppError(CamouChatError):
     pass
 
 
-class MessageFilterError(WhatsAppError):
-    """Message filters Error"""
-
-    pass
-
-
 class WhatsAppStorageError(WhatsAppError):
     pass
 

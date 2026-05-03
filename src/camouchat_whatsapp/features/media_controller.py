@@ -7,12 +7,13 @@ import os
 import random
 import re
 import weakref
+from dataclasses import dataclass
 from logging import Logger, LoggerAdapter
 from pathlib import Path
 from typing import Any
 
 from camouchat_browser import ProfileInfo
-from camouchat_core import FileTyped, MediaControllerProtocol, MediaType
+from camouchat_core import MediaControllerProtocol, MediaType
 from playwright.async_api import (
     FileChooser,
     Locator,
@@ -28,20 +29,29 @@ from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_whatsapp.exceptions import WhatsAppError, WhatsappMediaError
 from camouchat_whatsapp.logger import w_logger
 
-# Todo add logger later.
+
+@dataclass(frozen=True)
+class FileTyped:
+    """Standard file metadata for media operations."""
+
+    uri: str
+    name: str
+    mime_type: str | None = None
+    size_bytes: int | None = None
 
 
 # ── Media-type → category bucket ──────────────────────────────────────────────
-_WA_TYPE_TO_CATEGORY: dict[str, str] = {
-    "image": "image",
-    "sticker": "image",
-    "video": "video",
-    "gif": "video",
-    "audio": "audio",
-    "ptt": "audio",
-    "document": "document",
-    "vcard": "document",
-    "product": "document",
+_WA_TYPE_TO_CATEGORY: dict[str, MediaType] = {
+    "image": MediaType.IMAGE,
+    "sticker": MediaType.IMAGE,
+    "video": MediaType.VIDEO,
+    "gif": MediaType.VIDEO,
+    "audio": MediaType.AUDIO,
+    "ptt": MediaType.AUDIO,
+    "document": MediaType.DOCUMENT,
+    "vcard": MediaType.DOCUMENT,
+    "product": MediaType.DOCUMENT,
+    # Checks for Video Note type coming in message.
 }
 
 # Category → ProfileInfo attribute name for the save directory
@@ -149,14 +159,14 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
 
             abs_path = await asyncio.to_thread(os.path.abspath, p_str)
             await chooser.set_files(abs_path)
+            await self.page.wait_for_timeout(random.uniform(0.7, 1.4))
             if force:
                 await asyncio.sleep(random.uniform(0.6, 1.0))
-                try:
-                    send_btn = self.page.get_by_role("button", name=re.compile(r"send", re.I)).last
+                send_btn = self.page.get_by_role("button", name=re.compile(r"send", re.I)).last
+                if await send_btn.is_visible(timeout=random.uniform(2000, 3000)):
                     await send_btn.click(timeout=4000)
                     self.log.debug("Media preview send button clicked.")
-                except Exception:
-                    # Fallback: simple Enter key press if button not found
+                else:
                     await self.page.keyboard.press("Enter")
                     self.log.debug("Media preview closed via Enter key.")
 

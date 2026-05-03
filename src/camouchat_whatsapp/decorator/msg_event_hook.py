@@ -35,6 +35,7 @@ from camouchat_browser import ProfileInfo
 
 from camouchat_whatsapp.api import WapiSession
 
+from .encrypt_hook import on_encrypt
 from .storage_hook import on_storage
 
 
@@ -42,8 +43,9 @@ from .storage_hook import on_storage
 class RegistryConfig:
     """Configuration for on_newMsg decorator pipeline."""
 
-    profile: ProfileInfo | None = None  # enables storage if set
-    encrypt: bool = False  # enables encryption if True
+    profile: ProfileInfo | None = None  # required for storage or encrypt
+    store: bool = True  # enables DB storage if True AND profile is set
+    encrypt: bool = False  # enables encryption if True (requires profile)
 
 
 def on_newMsg(
@@ -78,37 +80,35 @@ def on_newMsg(
                 f"@on_newMsg: '{func.__name__}' must be an async function. Got: {type(func)}"
             )
 
-        # Build the handler pipeline at decoration time
-        # Each wrapper adds a capability layer around the user's function
         handler = func
 
-        if config is not None and config.profile is not None:
-            storage_decorator = on_storage(config.profile)
-            handler = storage_decorator(handler)
-
-            # Layer 2: encryption (future)
-            # if config.encrypt:
-            #     from .encrypt_hook import on_encrypt
-            #     handler = on_encrypt()(handler)
+        if config is not None:
+            if config.profile is not None and config.store:
+                storage_decorator = on_storage(config.profile)
+                handler = storage_decorator(handler)
+            if config.encrypt:
+                if config.profile is None:
+                    raise ValueError("@on_newMsg: 'encrypt=True' requires a valid profile.")
+                encrypt_decorator = on_encrypt(config.profile)
+                handler = encrypt_decorator(handler)
 
         @functools.wraps(func)
         async def _register() -> None:
             """Registration coroutine — await this to activate the handler."""
-            is_ready = getattr(wapi_session, "is_ready", False)
+            is_ready = wapi_session.is_ready
             if not is_ready:
                 await wapi_session.start()
 
-            msg_manager = getattr(wapi_session, "message_manager", None)
+            msg_manager = wapi_session.message_manager
             if msg_manager is None:
                 raise RuntimeError(
                     "@on_newMsg: wapi_session has no 'message_manager'. "
                     "Ensure WapiSession is fully initialised."
                 )
 
-            # Register the full pipeline (storage-wrapped if config given)
+            # Registers Handler internally
             msg_manager.register_handler(handler)
 
-        # Return registration coroutine so caller can: await on_message()
         return _register
 
     return decorator

@@ -12,8 +12,7 @@ from logging import Logger, LoggerAdapter
 from typing import Any
 
 from camouchat_browser import DirectoryManager, ProfileInfo
-from camouchat_core import MessageProtocol, StorageProtocol
-from sqlalchemy import exists, select
+from camouchat_core import MessageProtocol, MessageType, StorageProtocol
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -92,6 +91,7 @@ class SQLAlchemyStorage(StorageProtocol):
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
         self._writer_task: asyncio.Task | None = None
         self._running = False
+        self._flush_event = asyncio.Event()
         self._initialized_ = False
 
     @staticmethod
@@ -256,8 +256,16 @@ class SQLAlchemyStorage(StorageProtocol):
             return
 
         self._running = True
+        self._flush_event.clear()
         self._writer_task = asyncio.create_task(self._writer_loop())
         self.log.info("Background writer started.")
+
+    async def flush(self) -> None:
+        """Force an immediate flush of the batch queue."""
+        if not self._running:
+            return
+        self._flush_event.set()
+        await self.queue.put([])  # Wake up queue.get() immediately
 
     async def _writer_loop(self) -> None:
         """Background loop that consumes queue and writes batches."""
@@ -266,26 +274,45 @@ class SQLAlchemyStorage(StorageProtocol):
 
         while self._running:
             try:
+                now = asyncio.get_event_loop().time()
+                time_since_flush = now - last_flush
+                time_to_wait = max(0.1, self.flush_interval - time_since_flush)
+
                 try:
-                    msg = await asyncio.wait_for(self.queue.get(), timeout=self.flush_interval)
+                    msg = await asyncio.wait_for(self.queue.get(), timeout=time_to_wait)
+
+                    if msg is None:  # Shutdown sentinel
+                        self.queue.task_done()
+                        break
+
                     if isinstance(msg, list):
-                        batch.extend(msg)
+                        if msg:  # Ignore empty lists used as flush wakeups
+                            batch.extend(msg)
                     else:
                         batch.append(msg)
+
                     self.queue.task_done()
                 except TimeoutError:
                     pass
 
+                if not self._running:
+                    break
+
                 current_time = asyncio.get_event_loop().time()
-                should_flush = len(batch) >= self.batch_size or (
-                    batch and current_time - last_flush >= self.flush_interval
+                should_flush = (
+                    len(batch) >= self.batch_size
+                    or (batch and (current_time - last_flush) >= self.flush_interval)
+                    or self._flush_event.is_set()
                 )
 
                 if should_flush and batch:
                     await self._insert_batch_internally(batch)
                     batch.clear()
                     last_flush = current_time
+                    self._flush_event.clear()
 
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 self.log.error(f"Writer loop error: {e}", exc_info=True)
                 await asyncio.sleep(1)
@@ -294,10 +321,32 @@ class SQLAlchemyStorage(StorageProtocol):
         if batch:
             await self._insert_batch_internally(batch)
 
-    async def enqueue_insert(self, msgs: Sequence[MessageProtocol], **kwargs) -> None:
-        """Add messages to queue for batch insertion."""
+    async def enqueue_insert(
+        self, msgs: Sequence[MessageProtocol] | MessageProtocol, **kwargs
+    ) -> None:
+        """
+        Add messages to queue for batch insertion.
+
+        Parameters
+        ----------
+        msgs : Sequence[MessageProtocol] | MessageProtocol
+            Messages to insert.
+        **kwargs : dict
+            Optional arguments.
+        min_insert_time : float, optional
+            Minimum time to wait before inserting the messages.
+            If -1, the default flush interval is used.
+            we can change the flush interval via this runtime flag too.
+        """
+        min_insert_time: float = kwargs.get("min_insert_time", -1)
+        if min_insert_time >= 0:
+            self.flush_interval = min_insert_time
+
         if not msgs:
             return
+
+        if isinstance(msgs, MessageProtocol):
+            msgs = [msgs]
 
         for msg in msgs:
             await self.queue.put(msg)
@@ -368,8 +417,6 @@ class SQLAlchemyStorage(StorageProtocol):
         fromme = getattr(msg, "fromMe", None)
         timestamp = getattr(msg, "timestamp", 0.0)
         encryption_nonce = getattr(msg, "encryption_nonce", None)
-
-        # Support both API (jid_From) and DOM (from_chat.id_serialized) formats
         chat_id = getattr(msg, "jid_From", "")
         if not chat_id:
             from_chat = getattr(msg, "from_chat", None)
@@ -380,6 +427,9 @@ class SQLAlchemyStorage(StorageProtocol):
         if hasattr(msg, "to_dict"):
             with contextlib.suppress(Exception):
                 meta_data = msg.to_dict()
+
+        if encryption_nonce is not None:
+            msgtype = MessageType.CAMOU_CIPHERTEXT
 
         return Message(
             id_serialized=str(msg_id),
@@ -392,189 +442,6 @@ class SQLAlchemyStorage(StorageProtocol):
             timestamp=float(timestamp),
         )
 
-    def check_message_if_exists(self, msg_id: str, **kwargs) -> bool:
-        """
-        Check if message exists by ID (synchronous for quick checks).
-        Note: This uses asyncio.run() internally, not recommended in async context.
-        Use check_message_if_exists_async() in async code.
-        """
-        try:
-            return asyncio.run(self.check_message_if_exists_async(msg_id))
-        except Exception as e:
-            self.log.error(f"Existence check failed: {e}")
-            return False
-
-    async def check_message_if_exists_async(self, msg_id: str, **kwargs) -> bool:
-        """Async version of existence check."""
-        if not self._session_factory:
-            return False
-
-        session_factory = self._get_session_factory()
-        async with session_factory() as session:
-            try:
-                stmt = select(exists().where(Message.id_serialized == msg_id))
-                result = await session.execute(stmt)
-                return result.scalar() or False
-            except Exception as e:
-                self.log.error(f"Async existence check failed: {e}")
-                return False
-
-    def get_all_messages(self, **kwargs) -> list[dict[str, Any]]:
-        """
-        Retrieve all messages from DB (synchronous).
-        Uses asyncio.run() internally, not recommended in async context.
-        """
-        try:
-            return asyncio.run(self.get_all_messages_async(**kwargs))
-        except Exception as e:
-            self.log.error(f"Get all messages failed: {e}")
-            return []
-
-    async def get_all_messages_async(self, **kwargs) -> list[dict[str, Any]]:
-        """Async version of get all messages."""
-        if not self._session_factory:
-            return []
-
-        limit = kwargs.get("limit", 1000)
-        offset = kwargs.get("offset", 0)
-
-        session_factory = self._get_session_factory()
-        async with session_factory() as session:
-            try:
-                stmt = select(Message).order_by(Message.id.desc()).limit(limit).offset(offset)
-                result = await session.execute(stmt)
-                messages = result.scalars().all()
-                return [msg.to_dict() for msg in messages]
-            except Exception as e:
-                self.log.error(f"Async get all messages failed: {e}")
-                return []
-
-    async def get_messages_by_chat(self, chat_id: str, **kwargs) -> list[dict[str, Any]]:
-        """Get messages filtered by chat id (or HMAC digest if encryption is enabled)."""
-        if not self._session_factory:
-            return []
-
-        limit = kwargs.get("limit", 100)
-        session_factory = self._get_session_factory()
-
-        async with session_factory() as session:
-            try:
-                stmt = (
-                    select(Message)
-                    .where(Message.chat_id == chat_id)
-                    .order_by(Message.id.desc())
-                    .limit(limit)
-                )
-                result = await session.execute(stmt)
-                messages = result.scalars().all()
-                return [msg.to_dict() for msg in messages]
-            except Exception as e:
-                self.log.error(f"Get messages by chat failed: {e}")
-                return []
-
-    async def get_messages_by_ids_async(self, message_ids: list[str]) -> list[dict[str, Any]]:
-        """Retrieve specific messages by their serialized IDs."""
-        if not self._session_factory or not message_ids:
-            return []
-
-        session_factory = self._get_session_factory()
-        async with session_factory() as session:
-            try:
-                stmt = select(Message).where(Message.id_serialized.in_(message_ids))
-                result = await session.execute(stmt)
-                messages = result.scalars().all()
-                return [msg.to_dict() for msg in messages]
-            except Exception as e:
-                self.log.error(f"Failed to fetch messages by IDs: {e}")
-                return []
-
-    async def execute_raw_sql(
-        self, query: str, params: dict[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
-        """
-        Execute a raw SQL query and return results as a list of dictionaries.
-        Supports both SELECT and DML (INSERT/UPDATE/DELETE).
-        """
-        from sqlalchemy import text
-
-        if not self._session_factory:
-            return []
-
-        session_factory = self._get_session_factory()
-        async with session_factory() as session:
-            try:
-                stmt = text(query)
-                result = await session.execute(stmt, params or {})
-
-                # If query returns rows (like SELECT), convert to dicts
-                if getattr(result, "returns_rows", False):
-                    return [dict(row._mapping) for row in result.all()]
-
-                # For DML, commit and return empty
-                await session.commit()
-                return []
-            except Exception as e:
-                self.log.error(f"Raw SQL execution failed: {e}")
-                await session.rollback()
-                return []
-
-    async def get_decrypted_messages_async(
-        self,
-        key: bytes,
-        limit: int = 1000,
-        offset: int = 0,
-    ) -> list[dict[str, Any]]:
-        """
-        Fetch all messages and decrypt body + chat name on-the-fly.
-
-        This is the primary way a user retrieves readable messages when
-        encryption is enabled.  Pass the key from
-        ``ProfileManager.get_key(platform, profile_id)``.
-
-        Args:
-            key:    Raw 32-byte AES-256 key (from ProfileManager.get_key).
-            limit:  Max rows to fetch.
-            offset: Pagination offset.
-
-            List of dicts identical to ``to_dict()`` but with:
-            - ``body`` populated with decrypted plaintext (or original value
-              when the row was stored without encryption).
-
-        Example::
-
-            key = manager.get_key(Platform.WHATSAPP, "my_profile")
-            rows = await storage.get_decrypted_messages_async(key)
-        """
-        import base64 as _b64
-
-        from camouchat_core import MessageDecryptor
-
-        rows = await self.get_all_messages_async(limit=limit, offset=offset)
-
-        decryptor = MessageDecryptor(key)
-
-        result = []
-        for row in rows:
-            out = dict(row)
-
-            # Decrypt message body
-            enc_nonce = row.get("encryption_nonce")
-            if enc_nonce and out.get("body"):
-                try:
-                    nonce_bytes = _b64.b64decode(enc_nonce)
-                    cipher_bytes = _b64.b64decode(out["body"])
-                    msg_id = row.get("id_serialized", "")
-                    out["body"] = decryptor.decrypt_message(
-                        nonce_bytes, cipher_bytes, msg_id or None
-                    )
-                except Exception as e:
-                    self.log.warning(f"Failed to decrypt message {row.get('id_serialized')}: {e}")
-                    out["body"] = "<decryption failed>"
-
-            result.append(out)
-
-        return result
-
     def _get_session_factory(self) -> async_sessionmaker[AsyncSession]:
         if self._session_factory is None:
             raise WhatsAppStorageError("Database not initialized.")
@@ -583,11 +450,16 @@ class SQLAlchemyStorage(StorageProtocol):
     async def close_db(self, **kwargs) -> None:
         """Close connection and stop writer."""
         self._running = False
+        await self.queue.put(None)  # Wake up queue.get() for instant shutdown
 
         if self._writer_task:
-            self._writer_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._writer_task
+            try:
+                await asyncio.wait_for(self._writer_task, timeout=2.0)
+            except TimeoutError:
+                self.log.warning("Writer task shutdown timed out, cancelling.")
+                self._writer_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._writer_task
             self._writer_task = None
 
         if self._engine:
@@ -617,6 +489,53 @@ class SQLAlchemyStorage(StorageProtocol):
         await self.close_db()
         return False
 
-    async def get_profile_info(self) -> ProfileInfo:
-        """Return the profile info used to initialize the storage."""
-        return self.profile
+    async def get_all_messages_async(
+        self, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Retrieve all messages from storage asynchronously."""
+        factory = self._get_session_factory()
+        from sqlalchemy import select
+
+        async with factory() as session:
+            stmt = select(Message).order_by(Message.id.desc()).limit(limit).offset(offset)
+            result = await session.execute(stmt)
+            messages = result.scalars().all()
+            return [msg.to_dict() for msg in messages]
+
+    async def check_message_if_exists_async(self, msg_id: str, **kwargs) -> bool:
+        """Check if a message exists by ID asynchronously."""
+        factory = self._get_session_factory()
+        from sqlalchemy import select
+
+        async with factory() as session:
+            stmt = select(Message.id_serialized).where(Message.id_serialized == msg_id)
+            result = await session.execute(stmt)
+            return result.scalar() is not None
+
+    async def get_messages_by_chat(
+        self, chat_id: str, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Get messages filtered by chat id with pagination."""
+        factory = self._get_session_factory()
+        from sqlalchemy import select
+
+        async with factory() as session:
+            stmt = (
+                select(Message)
+                .where(Message.chat_id == chat_id)
+                .order_by(Message.id.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            messages = result.scalars().all()
+            return [msg.to_dict() for msg in messages]
+
+    def check_message_if_exists(self, msg_id: str, **kwargs) -> bool:
+        """Check if a message exists by ID (sync - not recommended)."""
+        # This is just to satisfy the protocol if needed, but it might not work well with async engine
+        raise NotImplementedError("Use check_message_if_exists_async")
+
+    def get_all_messages(self, **kwargs) -> list[dict[str, Any]]:
+        """Retrieve all messages from storage (sync - not recommended)."""
+        raise NotImplementedError("Use get_all_messages_async")

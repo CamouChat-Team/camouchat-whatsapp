@@ -24,8 +24,7 @@ from camouchat_core import MessageProcessorProtocol, StorageProtocol
 
 from camouchat_whatsapp.api.models import ChatModelAPI, MessageModelAPI
 from camouchat_whatsapp.api.wa_js import WAJS_Scripts, WapiWrapper
-from camouchat_whatsapp.core.noop import NoOpMessageFilter, NoOpStorage
-from camouchat_whatsapp.filters.message_filter import MessageFilter
+from camouchat_whatsapp.core.noop import NoOpStorage
 from camouchat_whatsapp.logger import w_logger
 
 
@@ -51,12 +50,10 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
         bridge: WapiWrapper,
         log: Logger | LoggerAdapter | None = None,
         storage_obj: StorageProtocol | None = None,
-        filter_obj: MessageFilter | None = None,
     ) -> None:
         self.page = None
         self.ui_config = None
         self.storage = storage_obj or NoOpStorage()
-        self.filter = filter_obj or NoOpMessageFilter()
         self.log = log or w_logger
         self._bridge = bridge
         self._bridge_active: bool = False

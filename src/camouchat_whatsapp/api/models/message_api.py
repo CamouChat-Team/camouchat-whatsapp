@@ -107,7 +107,7 @@ class MessageModelAPI(MessageProtocol):
 
     # ── Identity ──────────────────────────────────────────────────────────────
     id_serialized: str | None
-    encryption_nonce: str | None
+    encryption_nonce: str | None  # type: ignore[assignment]
     timestamp: int | None
     msgtype: str | None
     body: str | None
