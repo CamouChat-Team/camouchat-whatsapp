@@ -25,7 +25,6 @@ from .core import Login, WebSelectorConfig
 # Utils
 from .decorator import RegistryConfig, on_newMsg
 from .features import FileTyped, InteractionController, MediaController
-from .filters import MessageFilter
 
 # Infrastructure
 from .storage import SQLAlchemyStorage
@@ -51,5 +50,4 @@ __all__ = [
     # Utils
     "on_newMsg",
     "RegistryConfig",
-    "MessageFilter",
 ]

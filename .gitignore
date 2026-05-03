@@ -39,6 +39,7 @@ wget-*
 
 ignore/
 .codex
+src/camouchat_whatsapp/filters/
 
 # Secrets and environment
 .env

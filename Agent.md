@@ -35,8 +35,6 @@ camouchat_whatsapp/
 ├── storage/
 │   ├── SQLAlchemyStorage    # async batch writer (SQLite/PG/MySQL)
 │   └── queries.py → Query   # flexible retrieval layer
-└── filters/
-    └── MessageFilter        # ⚠ broken in current API — do not use
 ```
 
 ---
@@ -270,7 +268,7 @@ Failures raise `camouchat_whatsapp.exceptions.LoginError`.
 4. **`await handle()` is required** after `@on_newMsg` — it's a registration coroutine, not the handler itself.
 5. **`@on_storage` takes `ProfileInfo`**, not a `SQLAlchemyStorage` instance.
 6. **`Query` is NOT exported from top-level** — always import from `camouchat_whatsapp.storage.queries`.
-7. **`MessageFilter` is broken** — skip it, filter manually inside the handler.
+7. **Rate Limiting Patterns** — Rate limiting is currently a manual concern, but an inbuilt limiter will be added in a future version with Monitor&Metrics insertion.
 8. **Use `uv run pre-commit run --all-files`** before committing — ruff + ruff-format enforced.
 
 ---

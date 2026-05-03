@@ -31,7 +31,7 @@ High-stealth WhatsApp automation plugin for the CamouChat ecosystem. Built on to
 - **E2E Encryption**: All stored messages are encrypted at rest using AES-256-GCM.
 - **Async-First**: Fully `asyncio`-native for high-throughput multi-session workloads.
 - **Humanized Behavior**: Mouse movements, typing cadence, and delays mimic organic user behavior.
-- **Rate Limiting**: Built-in configurable rate-limit support to prevent account bans.
+
 
 ## Installation
 
@@ -185,24 +185,11 @@ if __name__ == "__main__":
 > - Avoid using multi-account automation until the full **1.0.0 release**.
 
 > [!CAUTION]
-> **`MessageFilter` is broken in the current API architecture — do not use it.**
+> **Rate Limiting Patterns**
 >
-> `MessageFilter` was designed for the legacy DOM-scraping pipeline where `from_chat` was a full `ChatProtocol` object.
-> In the current `MessageModelAPI`, `from_chat` is always an empty `str` (`""`), so all per-chat rate-limit buckets
-> collapse into a single key — the filter does not work correctly.
+> Rate limiting is currently a manual concern. An inbuilt limiter will be added in a future version with Monitor&Metrics insertion.
 >
-> **Wait for v0.7.4**, which ships a full rewrite aligned to the API architecture.
->
-> Until then, filter messages manually inside your `@on_newMsg` handler:
-> ```python
-> @on_newMsg(wapi_session=wapi)
-> async def handle(msg: MessageModelAPI):
->     if msg.fromMe or msg.isMdHistoryMsg:
->         return  # skip outbound / history-sync messages
->     if msg.msgtype not in ("chat", "image", "document"):
->         return  # skip unwanted types
->     # your logic here
-> ```
+> Until then, ensure you manually rate limit inside your `@on_newMsg` handler to avoid account bans.
 
 ## Documentation
 
