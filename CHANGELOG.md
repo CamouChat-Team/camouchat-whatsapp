@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SqlalchmeyStorage is now uses new ProfileManager Structure , and dialect can be changed with db_credendials and much more control over database.
 - scripts added and fixed in order to test new Hooks.
 - smoke test script added in order to test new hooks.
-- on_newMsg now adds RegistryConfig which can handle these inside @on_newMsg and RegistryConfig can fetch the storage.
+- on_newMsg now adds RegistryConfig which can handle these inside `@on_newMsg` and `RegistryConfig` can fetch the storage.
 - giving profile in the Registry now send msg to be automatically to be in storage saved.
 
 ### Changed
