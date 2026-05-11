@@ -32,6 +32,26 @@ High-stealth WhatsApp automation plugin for the CamouChat ecosystem. Built on to
 - **Async-First**: Fully `asyncio`-native for high-throughput multi-session workloads.
 - **Humanized Behavior**: Mouse movements, typing cadence, and delays mimic organic user behavior.
 
+## 🏆 Why Choose CamouChat?
+
+The Python ecosystem has a few options for WhatsApp automation, but many are no longer actively maintained or lack support for modern, headless deployments. We believe in building in public and letting the data speak for itself.
+
+Here is a live look at how CamouChat compares to the alternatives:
+
+| Feature / Metric        | 🦊 CamouChat          | 📦 PyWhatKit          | 💬 whatsapp-python    |
+|-------------------------|----------------------|----------------------|----------------------|
+| **Last Commit**         | [![Last Commit](https://camo.githubusercontent.com/b480170a75183f3766fe8939072252452e4143e7adeda5c9662d4499de6f9057/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f6c6173742d636f6d6d69742f424954532d526f6869742f43616d6f75436861743f7374796c653d666c61742d73717561726526636f6c6f723d73756363657373)](https://github.com/BITS-Rohit/CamouChat) | [![Last Commit](https://camo.githubusercontent.com/47896426c9d7fdb8554dd252d9a8e726fd1c55a4599ba67fd90e8ddce740ef20/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f6c6173742d636f6d6d69742f416e6b6974343034627574666f756e642f5079576861744b69743f7374796c653d666c61742d737175617265)](https://github.com/Ankit404butfound/PyWhatKit) | [![Last Commit](https://camo.githubusercontent.com/7425b29d44d2c5e8c745ae3c1223029f517a0f79ed204641503b2a19c7137a97/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f6c6173742d636f6d6d69742f6d756b756c686173652f77686174736170702d707974686f6e3f7374796c653d666c61742d737175617265)](https://github.com/mukulhase/whatsapp-python) |
+| **Open Issues**         | [![Issues](https://camo.githubusercontent.com/033931882a0fe0eab27247d364791b83b2ae877b6e71b4142acca48df451fbf1/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f6973737565732f424954532d526f6869742f43616d6f75436861743f7374796c653d666c61742d73717561726526636f6c6f723d73756363657373)](https://github.com/BITS-Rohit/CamouChat/issues) | [![Issues](https://camo.githubusercontent.com/0e8495cde8573f78376c33e3fdc3f9e8eaf1592def5fac4bbaad2797ae241f88/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f6973737565732f416e6b6974343034627574666f756e642f5079576861744b69743f7374796c653d666c61742d737175617265)](https://github.com/Ankit404butfound/PyWhatKit/issues) | [![Issues](https://camo.githubusercontent.com/30d6ca3ce73b9b0b79009e96a799f44d7d6881ce1b7d3f478a195ac6a5cbfa13/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f6973737565732f6d756b756c686173652f77686174736170702d707974686f6e3f7374796c653d666c61742d737175617265)](https://github.com/mukulhase/whatsapp-python/issues) |
+| **Headless Support**    | ✅ Native Support      | ❌ No                 | ⚠️ Partial             |
+| **Async Support**       | ✅ Yes                | ❌ No                 | ❌ No                  |
+| **Multi-Account Isolation** | ✅ Yes            | ❌ No                 | ❌ No                  |
+| **E2E Encryption**      | ✅ Yes                | ❌ No                 | ❌ No                  |
+| **Virtual Display (Xvfb)** | ✅ Native Support   | ❌ No                 | ⚠️ Partial             |
+| **Docker Ready**        | ❌ No                 | ❌ No                 | ✅ Yes                 |
+| **Rate Limiting**       | ❌ Manual              | ❌ No                 | ❌ No                  |
+
+> *Note: Repository statistics are fetched live directly from the GitHub API.*
+
 
 ## Installation
 
