@@ -43,8 +43,8 @@ class Login(LoginProtocol):
 
     def __init__(
         self,
-        page: Page,
-        profile: ProfileInfo,
+        page: Page | None = None,
+        profile: ProfileInfo | None = None,
         ui_config: WebSelectorConfig | None = None,
         log: Logger | LoggerAdapter | None = None,
         **kwargs,

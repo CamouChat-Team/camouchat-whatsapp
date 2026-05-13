@@ -70,6 +70,10 @@ async def main():
         print(msg, "\n")
 
         print(f"--------------Opening the Chat where msg came from : {msg.jid_From}")
+        
+        if msg.jid_From is None: 
+            raise ValueError(f"Msg jid_from cannot be none , {msg}")
+
         chat = await wapi.chat_manager.get_chat_by_id(msg.jid_From)  # get chatData
         print("Chat ---")
         print(chat)
@@ -253,7 +257,7 @@ if __name__ == "__main__":
             msgs = await query.get_messages_by_ids_async(_session_msg_ids)
             print(f"\n[DB] Retrieved {len(msgs)} messages tracked in this session:")
             for i, m in enumerate(msgs, 1):
-                body = str(m.body)[:50].replace("\n", " ")
+                body = m.body[:50].replace("\n", " ")
                 print(f" {i}. {m.msgtype} | FromMe: {m.fromMe} | Body: {body}...")
 
         try:
