@@ -99,8 +99,8 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
     ):
         if hasattr(self, "_initialized") and self._initialized:
             return
-        
-        if page is None: 
+
+        if page is None:
             raise ValueError("Page must not be None.")
         self.page = page
         self.ui_config = ui_config or WebSelectorConfig(page=page)
@@ -152,7 +152,7 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
                 await target.click(timeout=3000)
             chooser: FileChooser = await fc.value
 
-            p_str : str = file.uri
+            p_str: str = file.uri
             if not await asyncio.to_thread(os.path.exists, p_str) or not await asyncio.to_thread(
                 os.path.isfile, p_str
             ):

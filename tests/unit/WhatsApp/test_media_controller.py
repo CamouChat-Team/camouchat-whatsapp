@@ -63,7 +63,7 @@ def media_capable_instance(mock_page, mock_logger, mock_ui_config):
 
 @pytest.mark.asyncio
 async def test_init_page_none(mock_logger, mock_ui_config):
-    with pytest.raises(ValueError, match="page must not be None"):
+    with pytest.raises(ValueError, match="Page must not be None."):
         MediaController(page=None, log=mock_logger, ui_config=mock_ui_config)
 
 

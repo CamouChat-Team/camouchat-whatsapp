@@ -147,9 +147,7 @@ class WapiWrapper:
           - Hides WPP under that non-enumerable, non-configurable, non-writable key.
           - Deletes `window.WPP` to evade Meta's integrity.js scanners.
         """
-        js_path = await asyncio.to_thread(
-            os.path.abspath, os.path.join(os.path.dirname(__file__), "wppconnect-wa.js")
-        )
+        js_path = str(Path(__file__).parent / "wppconnect-wa.js")
         js_code = await asyncio.to_thread(self._read_text, js_path)
 
         self.log.info("Injecting WPP engine and waiting for Webpack integration...")

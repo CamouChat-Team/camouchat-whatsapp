@@ -70,8 +70,8 @@ async def main():
         print(msg, "\n")
 
         print(f"--------------Opening the Chat where msg came from : {msg.jid_From}")
-        
-        if msg.jid_From is None: 
+
+        if msg.jid_From is None:
             raise ValueError(f"Msg jid_from cannot be none , {msg}")
 
         chat = await wapi.chat_manager.get_chat_by_id(msg.jid_From)  # get chatData
