@@ -5,6 +5,8 @@ Provides chat processing, message handling, media operations,
 and human-like interaction capabilities for WhatsApp Web automation.
 """
 
+__version__ = "0.7.3"
+
 # Public API imports (runtime)
 
 # Wajs
