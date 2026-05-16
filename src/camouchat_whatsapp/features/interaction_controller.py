@@ -197,7 +197,7 @@ class InteractionController(InteractionControllerProtocol):
         if not message.id_serialized:
             raise WhatsAppInteractionError("Message or data_id is missing.")
 
-        data_id = str(message.id_serialized)
+        data_id = message.id_serialized
         from_me = self._message_from_me(message, data_id)
         retries = 10
         delay = 1.0
