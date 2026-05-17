@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Changed
+- Refactored `ChatModelAPI` and `MessageModelAPI` to use composition with metadata classes
+- Added backward-compatibility properties to maintain existing API surface
+
+### Added
+- `ChatIdentity`, `ChatActivity`, `ChatPermissions`, `ChatState`, `ChatEphemeral` classes
+- `MessageIdentity`, `MessageArrival`, `MessageSocial`, `MessageEphemeral`, `MessageSpecialFlags`, `MessageQuoted`, `MessageMedia`, `MessagePoll`, `MessageEvent`, `MessageVCard`, `MessageSender` classes
+
+---
+
 ## [0.7.3] — 2026-05-03
 
 ### Added
