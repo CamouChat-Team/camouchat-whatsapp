@@ -53,18 +53,18 @@ class InteractionController(InteractionControllerProtocol):
     def __init__(
         self,
         page: Page,
+        wapi: WapiSession,
         ui_config: WebSelectorConfig | None = None,
         log: LoggerAdapter | Logger | None = None,
-        wapi: WapiSession | None = None,
     ) -> None:
         if hasattr(self, "_initialized") and self._initialized:
             return
-        if page is None:
-            raise ValueError("page must not be None")
+
         self.page = page
+        self._wapi: WapiSession = wapi
         self.ui_config = ui_config or WebSelectorConfig(page=page)
         self.log = log or w_logger
-        self._wapi: WapiSession | None = wapi
+
         self._initialized = True
 
     # ----------------------------------------------------
@@ -197,8 +197,8 @@ class InteractionController(InteractionControllerProtocol):
         if not message.id_serialized:
             raise WhatsAppInteractionError("Message or data_id is missing.")
 
-        data_id = str(message.id_serialized)
-        from_me = self._message_from_me(message, data_id)
+        data_id = message.id_serialized
+        from_me = self._message_from_me(message)
         retries = 10
         delay = 1.0
 
@@ -360,11 +360,14 @@ class InteractionController(InteractionControllerProtocol):
         )
         return True
 
-    def _message_from_me(self, message: MessageModelAPI, data_id: str) -> bool:
+    def _message_from_me(self, message: MessageModelAPI) -> bool:
         """Resolve message direction, falling back to WhatsApp's data-id prefix."""
-        from_me = getattr(message, "fromMe", None)
-        if from_me is not None:
-            return bool(from_me)
+        if message.fromMe is not None:
+            return message.fromMe
+
+        data_id = message.id_serialized
+        if data_id is None:
+            raise WhatsAppInteractionError("data_id is None")
 
         return data_id.startswith("true_")
 

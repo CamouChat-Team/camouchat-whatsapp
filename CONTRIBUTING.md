@@ -71,10 +71,11 @@ pytest
 
 ## Development Workflow
 
-1. **Synchronize**: Always rebase your branch from the upstream main before starting new work.
-2. **Implement**: Write your code.
-3. **Lint**: Run mandatory checks (`black`, `ruff`, `mypy`, `deptry`).
-4. **Test**: Especially for web selector changes.
-5. **PR**: Open a PR with a clear description and mention the issue it closes.
+1. **Branch**: Create feature branches from the `dev` branch, not `main`.
+2. **Synchronize**: Always rebase your branch from the upstream `dev` branch before starting new work.
+3. **Implement**: Write your code.
+4. **Lint**: Run mandatory checks (`black`, `ruff`, `mypy`, `deptry`).
+5. **Test**: Especially for web selector changes.
+6. **PR**: Open a PR targeting the `dev` branch with a clear description and mention the issue it closes.
 
 Thank you for helping us build a better automation SDK!

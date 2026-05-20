@@ -49,12 +49,6 @@ class Login(LoginProtocol):
         log: Logger | LoggerAdapter | None = None,
         **kwargs,
     ):
-        if page is None:
-            raise ValueError("page must not be None")
-
-        if profile is None:
-            raise ValueError("profile must not be None")
-
         if hasattr(self, "_initialized") and self._initialized:
             return
 
