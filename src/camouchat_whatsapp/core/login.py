@@ -43,18 +43,12 @@ class Login(LoginProtocol):
 
     def __init__(
         self,
-        page: Page | None = None,
-        profile: ProfileInfo | None = None,
+        page: Page,
+        profile: ProfileInfo,
         ui_config: WebSelectorConfig | None = None,
         log: Logger | LoggerAdapter | None = None,
         **kwargs,
     ):
-        if page is None:
-            raise ValueError("page must not be None")
-
-        if profile is None:
-            raise ValueError("profile must not be None")
-
         if hasattr(self, "_initialized") and self._initialized:
             return
 

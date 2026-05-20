@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.4] — Unreleased ( Expected : 2026-06-10 )
+
+### Changed
+
+- `Readme.md` updated with Competitor Matrix.
+- updated internal `page` & `wapisession` to be mandatory for cleaner visibility.
+
+---
+
 ## [0.7.3] — 2026-05-03
 
 ### Added

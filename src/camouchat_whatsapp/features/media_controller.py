@@ -90,23 +90,22 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
 
     def __init__(
         self,
-        page: Page | None = None,
+        page: Page,
+        wapi: WapiSession,
+        profile: ProfileInfo,
         ui_config: WebSelectorConfig | None = None,
         log: Logger | LoggerAdapter | None = None,
-        wapi: WapiSession | None = None,
-        profile: ProfileInfo | None = None,
         **kwargs,
     ):
         if hasattr(self, "_initialized") and self._initialized:
             return
 
-        if page is None:
-            raise ValueError("Page must not be None.")
         self.page = page
+        self._wapi: WapiSession = wapi
+        self._profile: ProfileInfo = profile
         self.ui_config = ui_config or WebSelectorConfig(page=page)
         self.log = log or w_logger
-        self._wapi: WapiSession | None = wapi
-        self._profile: ProfileInfo | None = profile
+
         self._initialized = True
 
     # ─────────────────────────────────────────────────────────────────────────
