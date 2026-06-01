@@ -1,5 +1,6 @@
 # CamouChat WhatsApp 🟢
 
+
 > [!IMPORTANT]
 > 🦊 **This is the CamouChat WhatsApp Plugin Repository.**
 > If you are looking for the main CamouChat project or full ecosystem documentation, please visit our **[Central Repository](https://github.com/CamouChat-Team/CamouChat)**.
@@ -64,6 +65,70 @@ python -m camoufox fetch
 
 This downloads the latest hardened Firefox binary used internally by [Camoufox](https://camoufox.com/).
 
+---
+
+## 🏁 Getting Started
+
+New to CamouChat? Follow these steps to get up and running in minutes.
+
+### Step 1 — Install & fetch binaries (one-time)
+
+```bash
+pip install camouchat-whatsapp "camoufox[geoip]"
+python -m camoufox fetch
+```
+
+> ⚠️ `python -m camoufox fetch` is **mandatory**. It downloads the compiled Camoufox Firefox binaries. Skip this and nothing will start.
+
+### Step 2 — Minimal working example
+
+```python
+import asyncio
+from camouchat_browser import BrowserConfig, CamoufoxBrowser, ProfileManager
+from camouchat_core import Platform
+from camouchat_whatsapp import Login, WapiSession
+
+async def main():
+    pm = ProfileManager()
+    profile = pm.create_profile(platform=Platform.WHATSAPP, profile_id="my_account")
+
+    config = BrowserConfig.from_dict({"platform": Platform.WHATSAPP, "headless": False})
+    browser = CamoufoxBrowser(config=config, profile=profile)
+    page = await browser.get_page()
+
+    login = Login(page=page, profile=profile)
+    await login.login(method=0)  # method=0 → QR code login
+
+    print("✅ CamouChat is ready!")
+    await asyncio.Event().wait()
+
+asyncio.run(main())
+```
+
+Scan the QR code in the browser window. Your session is saved automatically for future runs.
+
+### What Each Package Does
+
+| Package | Role |
+|---|---|
+| `camouchat-core` | Foundational interfaces, async logging, AES-256 encrypted storage contracts |
+| `camouchat-browser` | Stealth browser layer — Camoufox integration, fingerprint spoofing, sandboxed profiles |
+| `camouchat-whatsapp` | WhatsApp plugin — wa-js bridge, event-driven messaging, zero DOM scraping |
+
+### Common Setup Errors
+
+| Error | Fix |
+|---|---|
+| `ModuleNotFoundError: camouchat_browser` | Run `pip install camouchat-whatsapp` |
+| `camoufox binaries not found` | Run `python -m camoufox fetch` |
+| `BrowserManager failed to start` | Re-run `python -m camoufox fetch` (binary may be corrupted) |
+| QR code not appearing | Ensure you're in a GUI environment; use VNC if on a headless server |
+| `Connection timeout` on login | Check your internet connection and retry |
+
+> 📂 More ready-to-run starter scripts in the **[`examples/`](./examples/)** directory.
+
+---
+
 ## Quick Start
 
 ```python
@@ -108,7 +173,6 @@ async def main():
 
     @on_newMsg(wapi_session=wapi, config=registry)
     async def handle_message(msg: MessageModelAPI):
-        # --- Decrypt message on-the-fly for command processing ---
         plain_body = msg.body
         if msg.encryption_nonce and msg.body:
             key_path = profile.encryption.get("key_file")
@@ -126,9 +190,7 @@ async def main():
 
         print(f"\n[+] New Msg from {msg.jid_From}: {plain_body}")
 
-        # --- Command Handling ---
         if plain_body == "!ping":
-            # API send (Zero DOM interaction - stealthy)
             await interaction.send_api_text(
                 chat_id=msg.jid_From,
                 text="🏓 Pong!",
@@ -136,7 +198,6 @@ async def main():
             )
 
         elif plain_body and plain_body.startswith("!echo "):
-            # Humanized DOM send (Simulates keyboard typing)
             echo_text = plain_body.replace("!echo ", "")
             await interaction.send_text(
                 message=msg,
@@ -146,20 +207,15 @@ async def main():
             )
 
         elif msg.msgtype in ("image", "video", "document"):
-            # Media handling (Save & Re-upload)
             saved_path = await media.save_media(message=msg)
             if saved_path:
                 print(f"[✔] Media saved to {saved_path}")
-
-                # Re-upload the same media back
                 mtype = MediaType.IMAGE if msg.msgtype == "image" else MediaType.DOCUMENT
                 file_obj = FileTyped(uri=saved_path, name=os.path.basename(saved_path), mime_type=msg.mimetype)
-
                 await media.add_media(mtype=mtype, file=file_obj, force=True)
 
-    # 6. Activate listener and wait
     await handle_message()
-    print("[\u2714] Hook active. Try sending !ping, !echo <text>, or an image in WhatsApp.")
+    print("[✔] Hook active. Try sending !ping, !echo <text>, or an image in WhatsApp.")
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
@@ -213,6 +269,7 @@ For complete, runnable integration examples see the test directories:
 
 - **[E2E Scripts](https://github.com/CamouChat-Team/camouchat-whatsapp/tree/main/tests/E2E)** — full end-to-end integration tests covering message events, media, group operations, and command handling.
 - **[Smoke Tests](https://github.com/CamouChat-Team/camouchat-whatsapp/tree/main/tests/smoke)** — lightweight bridge validation script that checks every API surface (messages, chats, groups, media, privacy, labels, newsletters) against a live session.
+- **[Examples](./examples/)** — beginner-friendly starter scripts for common use cases.
 
 ## ⚖️ Security & Ethics
 
