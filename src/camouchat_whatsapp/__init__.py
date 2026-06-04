@@ -13,6 +13,7 @@ __version__ = "0.7.4rc1"
 # API models
 # API Manager layer
 from .api import (
+    ActivityEventModel,
     ChatApiManager,
     ChatModelAPI,
     MessageApiManager,
@@ -25,7 +26,7 @@ from .api import (
 from .core import Login, WebSelectorConfig
 
 # Utils
-from .decorator import RegistryConfig, on_newMsg
+from .decorator import RegistryConfig, on_activity, on_newMsg
 from .features import FileTyped, InteractionController, MediaController
 
 # Infrastructure
@@ -35,6 +36,8 @@ __all__ = [
     # wajs
     "WapiSession",
     "WapiWrapper",
+    # activity
+    "ActivityEventModel",
     # API models
     "ChatModelAPI",
     "MessageModelAPI",
@@ -50,6 +53,7 @@ __all__ = [
     # Infra
     "SQLAlchemyStorage",
     # Utils
+    "on_activity",
     "on_newMsg",
     "RegistryConfig",
 ]

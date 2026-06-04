@@ -66,6 +66,46 @@ await handle()  # registers handler — must be awaited once to activate
 
 ---
 
+## `@on_activity`
+
+Subscribes to the real-time activity stream emitted by WA-JS. This is the hook to use for online/offline badges, typing indicators, and app-level toast/notification updates.
+
+**Source:** `camouchat_whatsapp.decorator.activity_event_hook`
+
+### Signature
+
+```python
+def on_activity(wapi_session: WapiSession) -> Callable
+```
+
+### Usage
+
+```python
+from camouchat_whatsapp import on_activity, WapiSession
+
+wapi = WapiSession(page=page)
+
+@on_activity(wapi)
+async def handle_activity(event):
+    if event.event_name == "conn.online":
+        print(f"Connection online: {event.is_online}")
+    elif event.event_name == "chat.presence_change":
+        print(f"Presence: {event.contact_id} -> {event.state}")
+
+await handle_activity()
+```
+
+### What it emits
+
+The activity bridge forwards two WA-JS event types into Python:
+
+1. `conn.online` for connection-level online/offline changes.
+2. `chat.presence_change` for per-contact typing and presence updates.
+
+The callback receives a normalized `ActivityEventModel` object so downstream code can render notifications or update UI state without touching the browser bridge.
+
+---
+
 ## `@on_storage`
 
 Persists each incoming message to `SQLAlchemyStorage` **before** your handler runs.

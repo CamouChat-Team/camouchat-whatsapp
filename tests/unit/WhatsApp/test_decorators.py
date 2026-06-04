@@ -4,6 +4,7 @@ import pytest
 from camouchat_core import MessageProtocol
 
 from camouchat_whatsapp.decorator.msg_event_hook import RegistryConfig, on_newMsg
+from camouchat_whatsapp.decorator.activity_event_hook import on_activity
 from camouchat_whatsapp.decorator.storage_hook import on_storage
 
 
@@ -106,3 +107,21 @@ async def test_on_newMsg_missing_manager():
 
     with pytest.raises(RuntimeError):
         await my_handler()
+
+
+@pytest.mark.asyncio
+async def test_on_activity_decorator():
+    mock_wapi = MagicMock()
+    mock_wapi.is_ready = False
+    mock_wapi.start = AsyncMock()
+    mock_activity_mgr = MagicMock()
+    mock_wapi.activity_manager = mock_activity_mgr
+
+    @on_activity(mock_wapi)
+    async def my_handler(event):
+        pass
+
+    await my_handler()
+
+    mock_wapi.start.assert_called_once()
+    mock_activity_mgr.register_handler.assert_called_once()

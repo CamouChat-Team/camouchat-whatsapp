@@ -3,6 +3,7 @@ WapiSession maintains all the other Core Internal Managers.
 Managers :
     - ChatApiManager
     - MessageApiManager
+    - ActivityApiManager
     - CoreBridge
 """
 
@@ -12,15 +13,17 @@ from playwright.async_api import Page
 
 from camouchat_whatsapp.logger import w_logger
 
-from .managers import ChatApiManager, MessageApiManager
-from .models import ChatModelAPI, MessageModelAPI
+from .managers import ActivityApiManager, ChatApiManager, MessageApiManager
+from .models import ActivityEventModel, ChatModelAPI, MessageModelAPI
 from .wa_js import WapiWrapper
 
 __all__ = [
     "WapiSession",
+    "ActivityApiManager",
     "ChatApiManager",
     "MessageApiManager",
     "WapiWrapper",
+    "ActivityEventModel",
     "ChatModelAPI",
     "MessageModelAPI",
 ]
@@ -52,6 +55,7 @@ class WapiSession:
         w_logger.info(f"WapiSession initialized for page: {id(page)}")
         self.bridge = WapiWrapper(page)
         self.chat_manager = ChatApiManager(self.page, self.bridge)
+        self.activity_manager = ActivityApiManager(self.bridge)
         self.message_manager = MessageApiManager(self.bridge)
         self.log = w_logger
         self.is_ready = False
@@ -66,6 +70,7 @@ class WapiSession:
         if flag:
             self.is_ready = True
             await self.message_manager._setup_bridge()
+            await self.activity_manager._setup_bridge()
             self.log.info("WapiSession is ready to use.")
         else:
             self.log.error("""
@@ -78,6 +83,7 @@ class WapiSession:
         De-Auth the webpack connection & tear down all listeners.
         :return:
         """
+        await self.activity_manager.stop_bridge()
         await self.message_manager.stop_bridge()
         self.is_ready = False
         self.log.info("WapiSession stopped successfully")
