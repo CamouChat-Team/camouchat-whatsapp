@@ -41,6 +41,11 @@ class WapiWrapper:
         self._queue_key: str | None = None
         self._bridge_active: bool = False
 
+        # ── ListenerRegistry state ───────────────────────────────────────────
+        # Maps event name → guard_key for that listener.
+        # The shared queue is identified by self._queue_key (same field reused).
+        self._listener_registry: dict[str, str] = {}
+
     async def _evaluate_stealth(self, js_fragment: str) -> Any:
         """
         Executes a JS fragment in the real Main World via a script-tag injection bridge.
@@ -236,48 +241,105 @@ class WapiWrapper:
         return await self._evaluate_stealth(WAJS_Scripts.is_authenticated())
 
     # ──────────────────────────────────────────────────────────────
-    # 2. PUSH ARCHITECTURE — STEALTH DOM BRIDGE
+    # 2. PUSH ARCHITECTURE — STEALTH DOM BRIDGE  (ListenerRegistry)
     # ──────────────────────────────────────────────────────────────
 
     def _get_bridge_key(self) -> str:
         """
-        Returns (and lazily generates) a per-session random event key.
-        This key is the name of the CustomEvent crossing the DOM boundary.
-        It is randomized so it cannot be hardcoded into WA's blacklist.
+        Returns (and lazily generates) a per-session random base key.
+        All queue / guard names are derived from this single random token
+        so they cannot be hardcoded into WA's blacklist.
         """
         if not self._bridge_key:
-            import secrets
-
             self._bridge_key = f"_c{secrets.token_hex(6)}"
         return self._bridge_key
 
-    async def setup_message_bridge(self) -> None:
+    async def _ensure_stealth_queue(self) -> str:
         """
-        Registers the WPP message listener in the real Main World via 'mw:'.
-        Pushes incoming message ids into a hidden (non-enumerable) JS array.
-        Python drains it by polling via mw: every 100ms.
+        Idempotent — creates the ONE shared stealth queue on the first call.
 
-        Stealth: both the queue and the active-guard are defined with
-        enumerable=false, configurable=false so they are invisible to
-        Object.keys(window), for..in enumeration, and WhatsApp integrity scans.
+        The queue is:
+            - Non-enumerable  → invisible to Object.keys / for..in / WA scanners
+            - Non-configurable → cannot be overwritten or deleted from JS
+            - Writable        → Python can swap the array on drain
+
+        Returns:
+            The ``queue_key`` (e.g. ``'__cq_c203a2bd9fdb1'``).
         """
-        if self._bridge_active:
-            self.log.warning("setup_message_bridge: bridge already active, skipping re-register.")
-            return
+        if self._queue_key:
+            return self._queue_key  # already created this session
 
-        bridge_key = self._get_bridge_key()  # random per session, e.g. '_c203a2bd9fdb1'
-        queue_key = f"__cq{bridge_key}"  # e.g. '__cq_c203a2bd9fdb1'
-        guard_key = f"__cg{bridge_key}"  # e.g. '__cg_c203a2bd9fdb1'
-        self._queue_key = queue_key  # stored so poll_message_queue can use it
+        bridge_key = self._get_bridge_key()
+        queue_key = f"__cq{bridge_key}"
 
-        # Define hidden queue + guard in Main World — non-enumerable so scanners can't see them.
         await self.page.evaluate(f"""mw:(() => {{
+            if (Object.getOwnPropertyDescriptor(window, '{queue_key}')) return;
             Object.defineProperty(window, '{queue_key}', {{
                 value: [],
                 writable: true,
                 enumerable: false,
                 configurable: false,
             }});
+        }})()""")
+
+        self._queue_key = queue_key
+        self.log.debug(f"ListenerRegistry: shared stealth queue created → '{queue_key}'")
+        return queue_key
+
+    async def register_listener(
+        self,
+        event: str,
+        js_extractor: str,
+    ) -> None:
+        """
+        Register a ``wpp.on(event, handler)`` listener that pushes structured
+        events into the ONE shared stealth queue.
+
+        All registered listeners funnel into a single ``window[queue_key]`` array
+        as ``{event, data}`` objects. Python drains them all with one
+        :meth:`drain_queue` call.
+
+        Design constraints:
+            - Queue is created once (non-configurable, non-enumerable).
+            - Each event gets its OWN guard flag — prevents double registration
+              on page re-attach / hot-reload without a full teardown.
+            - ``js_extractor`` is a JS expression evaluated inside the
+              listener callback. It has access to the first argument named
+              ``msg``. The result is stored as the ``data`` field.
+            - ``{queue_key}`` and ``{wpp_key}`` are Python-templated before
+              eval — they are NOT user-controllable.
+
+        Args:
+            event:        wa-js event name, e.g. ``'chat.new_message'``.
+            js_extractor: JS expression returning the payload to store, e.g.
+                          ``"msg?.id?._serialized"`` or ``"msg"``.
+
+        Example::
+
+            await wrapper.register_listener(
+                event="chat.msg_ack_change",
+                js_extractor="msg?.id?._serialized",
+            )
+        """
+        if not self._wpp_key:
+            raise WAJSError(
+                "register_listener: WPP handle key not set — call wait_for_ready() first."
+            )
+
+        if event in self._listener_registry:
+            self.log.debug(f"register_listener: '{event}' already registered, skipping.")
+            return
+
+        queue_key = await self._ensure_stealth_queue()
+        wpp_key = self._wpp_key
+
+        # Derive a per-event guard key from the bridge base + event slug.
+        safe_event_slug = event.replace(".", "_").replace("-", "_")[:32]
+        guard_key = f"__cg{self._get_bridge_key()}_{safe_event_slug}"
+
+        # Create per-listener guard flag (non-enumerable).
+        await self.page.evaluate(f"""mw:(() => {{
+            if (Object.getOwnPropertyDescriptor(window, '{guard_key}')) return;
             Object.defineProperty(window, '{guard_key}', {{
                 value: false,
                 writable: true,
@@ -286,48 +348,160 @@ class WapiWrapper:
             }});
         }})()""")
 
-        # Register wpp.on listener — entirely in Main World via mw:.
-        wpp_key = self._wpp_key
+        # Register the wpp.on listener in Main World.
         await self.page.evaluate(f"""mw:(async () => {{
             const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;
             if (!wpp) {{
-                console.warn('CamouBridge: WPP handle missing at key {wpp_key}.');
+                console.warn('CamouBridge [register_listener]: WPP handle missing at key {wpp_key}.');
                 return;
             }}
-            if (window['{guard_key}']) return;
+            if (window['{guard_key}']) return;  // already registered for this event
 
-            wpp.on('chat.new_message', (msg) => {{
+            wpp.on('{event}', (msg) => {{
                 try {{
-                    const id = msg && msg.id && msg.id._serialized
-                        ? msg.id._serialized : null;
-                    if (id) window['{queue_key}'].push(id);
-                }} catch (e) {{}}
+                    const data = {js_extractor};
+                    if (data !== undefined && data !== null) {{
+                        window['{queue_key}'].push({{ event: '{event}', data: data }});
+                    }}
+                }} catch (e) {{
+                    console.warn('CamouBridge [{event}] extractor error:', e);
+                }}
             }});
 
             window['{guard_key}'] = true;
         }})()""")
 
+        self._listener_registry[event] = guard_key
+        self.log.info(
+            f"ListenerRegistry: registered '{event}' → guard='{guard_key}' queue='{queue_key}'"
+        )
+
+    async def drain_queue(self) -> list[dict[str, Any]]:
+        """
+        Atomically drains the shared stealth queue in ONE JS round-trip.
+
+        Uses a safe atomic JS swap::
+
+            const q = window[key]; window[key] = []; return q;
+
+        This is safe because the JS engine is single-threaded — no race
+        condition is possible between reading the old array and assigning
+        an empty one.
+
+        Returns:
+            ``list[dict]`` — each item is ``{"event": str, "data": Any}``.
+            Returns ``[]`` if the queue is empty, the registry is empty,
+            or an error occurs.
+
+        Example output::
+
+            [
+                {"event": "chat.new_message",    "data": "true_91..._ABCD"},
+                {"event": "chat.msg_ack_change", "data": "true_91..._EFGH"},
+            ]
+        """
+        if not self._queue_key or not self._listener_registry:
+            return []
+        try:
+            qk = self._queue_key
+            raw: list[dict[str, Any]] = await self.page.evaluate(
+                f"mw:(() => {{ const q = window['{qk}'] || []; window['{qk}'] = []; return q; }})()"
+            )
+            return raw or []
+        except Exception as exc:
+            self.log.debug(f"drain_queue: suppressed error — {exc}")
+            return []
+
+    async def teardown_all_listeners(self) -> None:
+        """
+        Full registry teardown — resets ALL per-listener guard flags and
+        clears the shared stealth queue.
+
+        Call this before re-attaching listeners after a page reload so that
+        :meth:`register_listener` can re-register ``wpp.on`` handlers
+        cleanly (guards default back to ``false``).
+
+        Note:
+            Because queue and guard properties are ``configurable: false``,
+            they cannot be deleted. We reset them to their initial values:
+            queue → ``[]``, guards → ``false``.
+        """
+        if not self._listener_registry and not self._queue_key:
+            return  # nothing to tear down
+
+        # Reset all guard flags in one mw: call.
+        guard_resets = "\n".join(
+            f"    if (typeof window['{gk}'] !== 'undefined') window['{gk}'] = false;"
+            for gk in self._listener_registry.values()
+        )
+
+        qk = self._queue_key or ""
+        clear_queue = (
+            f"    if (typeof window['{qk}'] !== 'undefined') window['{qk}'] = [];" if qk else ""
+        )
+
+        await self.page.evaluate(f"""mw:(() => {{
+{guard_resets}
+{clear_queue}
+        }})()""")
+
+        events_torn = list(self._listener_registry.keys())
+        self._listener_registry.clear()
+        self._bridge_active = False
+        self._bridge_key = None
+        self._queue_key = None
+
+        self.log.debug(f"ListenerRegistry: all listeners torn down. Events cleared: {events_torn}")
+
+    # ── Backward-compatible shims ────────────────────────────────────────────
+
+    async def setup_message_bridge(self) -> None:
+        """
+        Backward-compatible entry point — sets up the ``chat.new_message``
+        listener via the new :meth:`register_listener` API.
+
+        Stealth: the shared queue and per-listener guard are defined with
+        ``enumerable=false, configurable=false`` so they are invisible to
+        ``Object.keys(window)``, ``for..in`` enumeration, and WA integrity scans.
+        """
+        if self._bridge_active:
+            self.log.warning("setup_message_bridge: bridge already active, skipping re-register.")
+            return
+
+        await self.register_listener(
+            event="chat.new_message",
+            js_extractor="msg && msg.id && msg.id._serialized ? msg.id._serialized : null",
+        )
+
         self._bridge_active = True
         self.log.info(
-            f"Stealth DOM Bridge active. wpp_key='{wpp_key}' queue='{queue_key}' (hidden, non-enumerable) | Mode: mw: poll"
+            f"Stealth DOM Bridge active via ListenerRegistry. "
+            f"wpp_key='{self._wpp_key}' queue='{self._queue_key}' "
+            "(hidden, non-enumerable) | Mode: mw: poll"
         )
 
     async def poll_message_queue(self) -> list:
         """
-        Drains the hidden Main World queue via mw: evaluate.
-        Returns a list of id_serialized strings (may be empty).
-        Called by MessageApiManager._poll_loop every 100ms.
+        Backward-compatible shim — drains the shared queue and returns ONLY
+        the ``data`` fields for ``chat.new_message`` events as a flat list.
+
+        Called by ``MessageApiManager._poll_loop`` every 100 ms.
+        New callers should use :meth:`drain_queue` directly.
         """
         if not self._bridge_active:
             return []
-        try:
-            qk = self._queue_key
-            ids = await self.page.evaluate(
-                f"mw:(() => {{ const q = window['{qk}'] || []; window['{qk}'] = []; return q; }})()"
-            )
-            return ids or []
-        except Exception:
-            return []
+        raw = await self.drain_queue()
+        return [
+            item["data"]
+            for item in raw
+            if item.get("event") == "chat.new_message" and item.get("data")
+        ]
+
+    async def teardown_message_bridge(self) -> None:
+        """
+        Backward-compatible shim — delegates to :meth:`teardown_all_listeners`.
+        """
+        await self.teardown_all_listeners()
 
     async def probe_expose_function_support(self) -> bool:
         """
@@ -364,25 +538,6 @@ class WapiWrapper:
             f"window[alias] in Isolated World = {'function ✓' if is_function else 'undefined ✗'}"
         )
         return bool(is_function)
-
-    async def teardown_message_bridge(self) -> None:
-        """
-        Removes the stealth bridge event listener from the Isolated World
-        and resets the Main World guard flag so it can be re-registered.
-        Cleans up without leaving enumerable traces on the window object.
-        """
-        if not self._bridge_active:
-            return
-
-        # Clear hidden properties via mw: — they're non-configurable so we just empty the queue.
-        qk = getattr(self, "_queue_key", None)
-        if qk:
-            await self.page.evaluate(f"mw:window['{qk}'] = []")
-
-        self._bridge_active = False
-        self._bridge_key = None
-        self._queue_key = None
-        self.log.info("Stealth DOM Bridge torn down.")
 
     # ─────────────────────────────────────────────
     # 3. DATA FETCHING

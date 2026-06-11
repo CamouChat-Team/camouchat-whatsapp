@@ -3,15 +3,23 @@ Here we will be testing the new Msg Event Hook based Architecture Prototyping.
 """
 
 import asyncio
+import logging
 
 from camouchat_browser import (
     BrowserConfig,
     CamoufoxBrowser,
     ProfileManager,
 )
-from camouchat_core import MediaType, Platform
+from camouchat_core import LoggerFactory, MediaType, Platform
 
 from camouchat_whatsapp import FileTyped, Login, MediaController, RegistryConfig
+
+# ── Logger level ────────────────────────────────────────────────────────────
+# Change to logging.DEBUG to see all internal traces (bridge, drain, locator).
+# Options: logging.DEBUG | logging.INFO | logging.WARNING | logging.ERROR
+LOG_LEVEL = logging.DEBUG
+LoggerFactory.set_level(LOG_LEVEL)
+# ─────────────────────────────────────────────────────────────────────────────
 
 _session_msg_ids: list[str] = []
 _session_profile = None
@@ -157,13 +165,12 @@ async def main():
         elif plain_body and plain_body.startswith("!echo "):
             print("[*] Command triggered: !echo (Humanized Interaction)")
             echo_text = plain_body.replace("!echo ", "")
-            await interaction.send_text(
+            return await interaction.send_text(  # returns bool status
                 message=msg,
                 text=f"Echo: {echo_text}",  # Type using manual/clipboard
                 quote=True,  # add quote using browser automation
                 send=True,  # send to send text or not.
             )
-            success = True
 
         elif plain_body == "!media":
             print("[*] Command triggered: !media — requesting test image upload")
