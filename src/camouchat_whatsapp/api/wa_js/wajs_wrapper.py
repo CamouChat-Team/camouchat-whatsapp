@@ -39,7 +39,10 @@ class WapiWrapper:
         self._wpp_key: str = ""  # per-session rotated WPP handle key
         self._bridge_key: str | None = None
         self._queue_key: str | None = None
+        self._activity_bridge_key: str | None = None
+        self._activity_queue_key: str | None = None
         self._bridge_active: bool = False
+        self._activity_bridge_active: bool = False
 
     async def _evaluate_stealth(self, js_fragment: str) -> Any:
         """
@@ -312,6 +315,77 @@ class WapiWrapper:
             f"Stealth DOM Bridge active. wpp_key='{wpp_key}' queue='{queue_key}' (hidden, non-enumerable) | Mode: mw: poll"
         )
 
+    async def setup_activity_bridge(self) -> None:
+        """
+        Registers the WPP activity/presence listeners in the real Main World.
+
+        Captures connection-level and contact-presence events emitted by WA-JS:
+          - conn.online
+          - chat.presence_change
+
+        Events are pushed into a hidden queue and drained by Python polling.
+        """
+        if self._activity_bridge_active:
+            self.log.warning(
+                "setup_activity_bridge: bridge already active, skipping re-register."
+            )
+            return
+
+        bridge_key = self._get_bridge_key()
+        queue_key = f"__aq{bridge_key}"
+        guard_key = f"__ag{bridge_key}"
+        self._activity_queue_key = queue_key
+
+        await self.page.evaluate(f"""mw:(() => {{
+            Object.defineProperty(window, '{queue_key}', {{
+                value: [],
+                writable: true,
+                enumerable: false,
+                configurable: false,
+            }});
+            Object.defineProperty(window, '{guard_key}', {{
+                value: false,
+                writable: true,
+                enumerable: false,
+                configurable: false,
+            }});
+        }})()""")
+
+        wpp_key = self._wpp_key
+        await self.page.evaluate(f"""mw:(async () => {{
+            const wpp = Object.getOwnPropertyDescriptor(window, '{wpp_key}')?.value;
+            if (!wpp) {{
+                console.warn('CamouBridge: WPP handle missing at key {wpp_key}.');
+                return;
+            }}
+            if (window['{guard_key}']) return;
+
+            const pushEvent = (eventName, payload) => {{
+                try {{
+                    window['{queue_key}'].push({{
+                        eventName,
+                        timestamp: Date.now(),
+                        ...payload,
+                    }});
+                }} catch (e) {{}}
+            }};
+
+            wpp.on('conn.online', (isOnline) => {{
+                pushEvent('conn.online', {{ online: !!isOnline }});
+            }});
+
+            wpp.on('chat.presence_change', (eventData) => {{
+                pushEvent('chat.presence_change', eventData || {{}});
+            }});
+
+            window['{guard_key}'] = true;
+        }})()""")
+
+        self._activity_bridge_active = True
+        self.log.info(
+            f"Activity bridge active. wpp_key='{wpp_key}' queue='{queue_key}' (hidden, non-enumerable) | Mode: mw: poll"
+        )
+
     async def poll_message_queue(self) -> list:
         """
         Drains the hidden Main World queue via mw: evaluate.
@@ -326,6 +400,22 @@ class WapiWrapper:
                 f"mw:(() => {{ const q = window['{qk}'] || []; window['{qk}'] = []; return q; }})()"
             )
             return ids or []
+        except Exception:
+            return []
+
+    async def poll_activity_queue(self) -> list:
+        """
+        Drains the hidden Main World activity queue via mw: evaluate.
+        Returns a list of event dictionaries (may be empty).
+        """
+        if not self._activity_bridge_active:
+            return []
+        try:
+            qk = self._activity_queue_key
+            events = await self.page.evaluate(
+                f"mw:(() => {{ const q = window['{qk}'] || []; window['{qk}'] = []; return q; }})()"
+            )
+            return events or []
         except Exception:
             return []
 
@@ -383,6 +473,22 @@ class WapiWrapper:
         self._bridge_key = None
         self._queue_key = None
         self.log.info("Stealth DOM Bridge torn down.")
+
+    async def teardown_activity_bridge(self) -> None:
+        """
+        Clears the hidden activity queue and resets bridge state.
+        """
+        if not self._activity_bridge_active:
+            return
+
+        qk = getattr(self, "_activity_queue_key", None)
+        if qk:
+            await self.page.evaluate(f"mw:window['{qk}'] = []")
+
+        self._activity_bridge_active = False
+        self._activity_bridge_key = None
+        self._activity_queue_key = None
+        self.log.info("Activity bridge torn down.")
 
     # ─────────────────────────────────────────────
     # 3. DATA FETCHING
