@@ -32,6 +32,76 @@ class EventName(StrEnum):
 
     MESSAGE_EVENT = "message"
     ACK_EVENT = "ack"
+    REVOKE_EVENT = "revoke"
+    EDIT_EVENT = "edit"
+
+
+# ── Circular-safe JSON extractor (for full raw payload dumps) ─────────────────
+_CIRCULAR_SAFE_EXTRACTOR: str = (
+    "JSON.parse(JSON.stringify(msg, (() => {"
+    "const s = new WeakSet();"
+    "return (k, v) => { if (typeof v === 'object' && v !== null) {"
+    "if (s.has(v)) return '[Circular]'; s.add(v); } return v; };"
+    "})()))"
+)
+
+
+@dataclass(frozen=True)
+class WaJSEvent:
+    """
+    Immutable bundle of a stable ``EventName`` key, the raw WA-JS event
+    string, and the JS extractor expression.
+
+    This is the ONLY place WA-JS event strings are written.
+    To rename a WA-JS event after a WhatsApp update, change it here — no
+    other file needs to be touched.
+
+    Usage::
+
+        await wapi.bridge.register_listener(WaJSEvents.REVOKE)
+    """
+
+    event_name: EventName
+    event: str
+    extractor: str
+
+
+class WaJSEvents:
+    """
+    Registry of all supported WA-JS listener events.
+
+    Each class-level attribute is a ``WaJSEvent`` bundle. Pass any of these
+    directly to ``register_listener()`` — no need to supply the raw WA-JS
+    event string or extractor manually::
+
+        await wapi.bridge.register_listener(WaJSEvents.ACK)
+        await wapi.bridge.register_listener(WaJSEvents.REVOKE)
+        await wapi.bridge.register_listener(WaJSEvents.EDIT)
+
+    If WA-JS renames an event (e.g. after a WhatsApp update), update only
+    the ``event`` string here — all call sites automatically pick up the change.
+    """
+
+    MESSAGE: WaJSEvent = WaJSEvent(
+        event_name=EventName.MESSAGE_EVENT,
+        event="chat.new_message",
+        extractor=_CIRCULAR_SAFE_EXTRACTOR,
+    )
+    ACK: WaJSEvent = WaJSEvent(
+        event_name=EventName.ACK_EVENT,
+        event="chat.msg_ack_change",
+        extractor="{ ack: msg?.ack, chat: String(msg?.chat || ''), ids_count: msg?.ids?.length }",
+    )
+    REVOKE: WaJSEvent = WaJSEvent(
+        event_name=EventName.REVOKE_EVENT,
+        event="chat.msg_revoke",
+        extractor=_CIRCULAR_SAFE_EXTRACTOR,
+    )
+    EDIT: WaJSEvent = WaJSEvent(
+        event_name=EventName.EDIT_EVENT,
+        event="chat.msg_edited",
+        extractor=_CIRCULAR_SAFE_EXTRACTOR,
+    )
 
 
 @dataclass
@@ -397,9 +467,11 @@ class WapiWrapper:
 
     async def register_listener(
         self,
-        event_name: EventName,
-        event: str,
-        js_extractor: str,
+        wa_event: "WaJSEvent | None" = None,
+        *,
+        event_name: "EventName | None" = None,
+        event: str | None = None,
+        js_extractor: str | None = None,
     ) -> None:
         """
         Register a ``wpp.on(event, handler)`` listener that pushes structured
@@ -436,6 +508,17 @@ class WapiWrapper:
                 js_extractor="msg?.id?._serialized",
             )
         """
+        # ── Resolve args: accept WaJSEvent bundle OR individual params ─────────
+        if wa_event is not None:
+            event_name = wa_event.event_name
+            event = wa_event.event
+            js_extractor = wa_event.extractor
+        elif event_name is None or event is None or js_extractor is None:
+            raise ValueError(
+                "register_listener: supply either a WaJSEvent bundle (first positional arg) "
+                "or all three keyword args: event_name, event, js_extractor."
+            )
+
         if not self._wpp_key:
             raise WAJSError(
                 "register_listener: WPP handle key not set — call wait_for_ready() first."
@@ -648,7 +731,7 @@ class WapiWrapper:
             produced) for the given event. Returns ``[]`` if none pending,
             the bridge is inactive, or the event is not registered.
         """
-        if not self._bridge_active or not self._queue_key:
+        if not self._queue_key:
             return []
 
         entry = self._listener_registry.get(event_name)
