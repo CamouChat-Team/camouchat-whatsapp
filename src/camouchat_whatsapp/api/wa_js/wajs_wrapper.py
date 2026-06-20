@@ -18,7 +18,6 @@ from camouchat_whatsapp.logger import w_logger
 
 from .wajs_scripts import WAJS_Scripts
 
-
 # ── Listener event model ────────────────────────────────────────────────────
 
 
@@ -88,6 +87,11 @@ class WapiWrapper:
         # is an implementation detail inside ListenerEntry.event.
         # The shared queue is identified by self._queue_key (same field reused).
         self._listener_registry: dict[EventName, ListenerEntry] = {}
+
+        # Per-session token used to authenticate all writes into the stealth
+        # queue. Only our JS code knows this value; WA integrity code cannot
+        # predict it. Generated lazily alongside _bridge_key.
+        self._session_token: str = ""
 
     async def _evaluate_stealth(self, js_fragment: str) -> Any:
         """
@@ -292,19 +296,30 @@ class WapiWrapper:
         Returns (and lazily generates) a per-session random base key.
         All queue / guard names are derived from this single random token
         so they cannot be hardcoded into WA's blacklist.
+
+        Also lazily initialises ``_session_token`` on first call, so both
+        values are always in sync with the same session lifecycle.
         """
         if not self._bridge_key:
             self._bridge_key = f"_c{secrets.token_hex(6)}"
+            self._session_token = secrets.token_hex(16)
         return self._bridge_key
 
     async def _ensure_stealth_queue(self) -> str:
         """
         Idempotent — creates the ONE shared stealth queue on the first call.
 
-        The queue is:
-            - Non-enumerable  → invisible to Object.keys / for..in / WA scanners
-            - Non-configurable → cannot be overwritten or deleted from JS
-            - Writable        → Python can swap the array on drain
+        The queue is a **closure-based token-gated object** (not a plain array)
+        stored at a non-enumerable, non-configurable, non-writable window key.
+
+        Security model:
+            - ``_data`` lives inside a JS closure — unreachable from any
+              external JS, including WA's integrity scanners.
+            - Every write (``push``) requires the per-session ``_session_token``
+              embedded at creation time. WA code cannot predict this token.
+            - ``drain`` / ``drainFor`` / ``clear`` are also token-gated.
+            - The window property itself is non-writable → cannot be replaced.
+            - Non-enumerable → invisible to ``Object.keys`` / ``for..in``.
 
         Returns:
             The ``queue_key`` (e.g. ``'__cq_c203a2bd9fdb1'``).
@@ -314,19 +329,70 @@ class WapiWrapper:
 
         bridge_key = self._get_bridge_key()
         queue_key = f"__cq{bridge_key}"
+        tok = self._session_token  # per-session secret, never leaves Python/our JS
 
         await self.page.evaluate(f"""mw:(() => {{
             if (Object.getOwnPropertyDescriptor(window, '{queue_key}')) return;
+
+            // Closure: _data is completely unreachable from outside this IIFE.
+            const _data = [];
+            const _tok  = '{tok}';
+
+            const _q = Object.create(null);
+
+            // push(item, token) — silently drops if token mismatches.
+            Object.defineProperty(_q, 'push', {{
+                value: function(item, t) {{
+                    if (t === _tok && item != null) _data.push(item);
+                }},
+                writable: false, enumerable: false, configurable: false,
+            }});
+
+            // drain(token) — atomically empties and returns all items.
+            Object.defineProperty(_q, 'drain', {{
+                value: function(t) {{
+                    if (t !== _tok) return [];
+                    return _data.splice(0);
+                }},
+                writable: false, enumerable: false, configurable: false,
+            }});
+
+            // drainFor(event, token) — splices only matching-event items.
+            Object.defineProperty(_q, 'drainFor', {{
+                value: function(ev, t) {{
+                    if (t !== _tok) return [];
+                    const out = [];
+                    let i = _data.length;
+                    while (i--) {{
+                        if (_data[i].event === ev) {{
+                            out.push(_data.splice(i, 1)[0].data);
+                        }}
+                    }}
+                    return out.reverse();
+                }},
+                writable: false, enumerable: false, configurable: false,
+            }});
+
+            // clear(token) — wipes all items (used at teardown).
+            Object.defineProperty(_q, 'clear', {{
+                value: function(t) {{
+                    if (t === _tok) _data.splice(0);
+                }},
+                writable: false, enumerable: false, configurable: false,
+            }});
+
+            // Attach the queue to window — non-writable, so it cannot be
+            // replaced by WA code even if they discover the key name.
             Object.defineProperty(window, '{queue_key}', {{
-                value: [],
-                writable: true,
+                value: _q,
+                writable: false,
                 enumerable: false,
                 configurable: false,
             }});
         }})()""")
 
         self._queue_key = queue_key
-        self.log.debug(f"ListenerRegistry: shared stealth queue created → '{queue_key}'")
+        self.log.debug(f"ListenerRegistry: token-gated stealth queue created → '{queue_key}'")
         return queue_key
 
     async def register_listener(
@@ -381,6 +447,7 @@ class WapiWrapper:
 
         queue_key = await self._ensure_stealth_queue()
         wpp_key = self._wpp_key
+        tok = self._session_token  # embedded in JS — authenticates push calls
 
         # Derive a per-event guard key from the bridge base + event slug.
         safe_event_slug = event.replace(".", "_").replace("-", "_")[:32]
@@ -410,7 +477,10 @@ class WapiWrapper:
                 try {{
                     const data = {js_extractor};
                     if (data !== undefined && data !== null) {{
-                        window['{queue_key}'].push({{ event: '{event}', data: data }});
+                        // Token authenticates this write — WA code cannot
+                        // predict the per-session token and will be silently
+                        // rejected by the queue's token-gated push method.
+                        window['{queue_key}'].push({{ event: '{event}', data: data }}, '{tok}');
                     }}
                 }} catch (e) {{
                     console.warn('CamouBridge [{event}] extractor error:', e);
@@ -435,13 +505,9 @@ class WapiWrapper:
         """
         Atomically drains the shared stealth queue in ONE JS round-trip.
 
-        Uses a safe atomic JS swap::
-
-            const q = window[key]; window[key] = []; return q;
-
-        This is safe because the JS engine is single-threaded — no race
-        condition is possible between reading the old array and assigning
-        an empty one.
+        Calls the token-gated ``drain(token)`` method on the closure-based
+        queue object. The token is the per-session secret embedded at queue
+        creation time — only our code can call this successfully.
 
         Returns:
             ``list[dict]`` — each item is ``{"event": str, "data": Any}``.
@@ -459,8 +525,9 @@ class WapiWrapper:
             return []
         try:
             qk = self._queue_key
+            tok = self._session_token
             raw: list[dict[str, Any]] = await self.page.evaluate(
-                f"mw:(() => {{ const q = window['{qk}'] || []; window['{qk}'] = []; return q; }})()"
+                f"mw:(() => {{ const q = window['{qk}']; return q ? q.drain('{tok}') : []; }})()"
             )
             return raw or []
         except Exception as exc:
@@ -508,16 +575,15 @@ class WapiWrapper:
         )
 
         qk = self._queue_key or ""
-        clear_queue = (
-            f"    if (typeof window['{qk}'] !== 'undefined') window['{qk}'] = [];" if qk else ""
-        )
+        tok = self._session_token
+        clear_queue = f"    if (window['{qk}']) window['{qk}'].clear('{tok}');" if qk else ""
 
         await self.page.evaluate(f"""mw:(() => {{
 {guard_resets}
 {clear_queue}
         }})()""")
 
-        events_torn = [str(k) for k in self._listener_registry.keys()]
+        events_torn = [str(k) for k in self._listener_registry]
         self._listener_registry.clear()
         self._bridge_active = False
         self._bridge_key = None
@@ -595,14 +661,13 @@ class WapiWrapper:
 
         qk = self._queue_key
         wa_event = entry.event  # raw WA-JS string — only looked up here
+        tok = self._session_token
 
         try:
             data_list: list[Any] = await self.page.evaluate(
                 f"mw:(() => {{"
-                f"  const q = window['{qk}'] || [];"
-                f"  const out = q.filter(i => i.event === '{wa_event}');"
-                f"  window['{qk}'] = q.filter(i => i.event !== '{wa_event}');"
-                f"  return out.map(i => i.data);"
+                f"  const q = window['{qk}'];"
+                f"  return q ? q.drainFor('{wa_event}', '{tok}') : [];"
                 f"}})()"
             )
             return data_list or []
