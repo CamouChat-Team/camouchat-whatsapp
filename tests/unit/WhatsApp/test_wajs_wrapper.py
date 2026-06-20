@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from camouchat_whatsapp.api.wa_js.wajs_wrapper import WapiWrapper
+from camouchat_whatsapp.api.wa_js.wajs_wrapper import EventName, ListenerEntry, WapiWrapper
 from camouchat_whatsapp.exceptions import WAJSError
 
 
@@ -116,6 +116,14 @@ async def test_wajs_wrapper_poll_message_queue(mock_page):
     wrapper._wpp_key = "secret_key"
     wrapper._bridge_active = True
     wrapper._queue_key = "__camou_queue__"
+
+    # Seed registry so drain_queue_for can resolve the WA-JS event string.
+    wrapper._listener_registry[EventName.MESSAGE_EVENT] = ListenerEntry(
+        name=EventName.MESSAGE_EVENT,
+        event="chat.new_message",
+        js_extractor="msg?.id?._serialized",
+        guard_key="__cg_test_guard__",
+    )
 
     mock_page.evaluate.return_value = ["id1", "id2"]
 

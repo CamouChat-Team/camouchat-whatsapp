@@ -196,6 +196,11 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
     async def stop_bridge(self) -> None:
         """
         Tears down the stealth DOM Bridge and clears all registered handlers.
+
+        Before clearing the queue, ``teardown_message_bridge`` flushes any
+        events that arrived between the last poll cycle and shutdown.
+        These are processed here so no in-flight messages are silently lost.
+
         Called by WapiSession.stop().
         """
         for task in (self._poll_task, self._drain_task):
@@ -203,7 +208,20 @@ class MessageApiManager(MessageProcessorProtocol[MessageModelAPI, ChatModelAPI])
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
-        await self._bridge.teardown_message_bridge()
+
+        flushed = await self._bridge.teardown_message_bridge()
+        if flushed:
+            self.log.info(
+                f"MessageApiManager: processing {len(flushed)} flushed item(s) from teardown."
+            )
+            for item in flushed:
+                event = item.get("event", "unknown")
+                data = item.get("data")
+                if data:
+                    self.log.debug(
+                        f"MessageApiManager: teardown flush — event='{event}' data={data!r}"
+                    )
+
         self._bridge_active = False
         self._handlers.clear()
         self.log.info("MessageApiManager: DOM bridge torn down, all handlers cleared.")
