@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import inspect
 from collections.abc import Callable
 from logging import Logger, LoggerAdapter
 from typing import Any
@@ -10,22 +11,33 @@ from camouchat_whatsapp.logger import w_logger
 
 
 class ActivityApiManager:
-    """Real-time activity and presence event manager."""
+    """Real-time activity and presence event manager.
+
+    Uses the shared WapiWrapper poll infrastructure (setup_activity_bridge +
+    poll_activity_queue) — no separate bridge layer or duplicate poll loops.
+    A single combined _poll_and_drain_loop replaces the former separate
+    _poll_loop / _drain_loop pair, eliminating the extra JS round-trip.
+
+    Page reload recovery: if the page reloads the WapiWrapper
+    _activity_bridge_active flag is reset to False, so the next call to
+    _setup_bridge() will cleanly re-register the WPP listener without
+    double-registering or silently failing.
+
+    stop_bridge() behaviour: all registered @on_activity handlers are cleared
+    when the bridge is torn down. Re-apply decorators before calling
+    _setup_bridge() again if you need to resume listening.
+    """
 
     def __init__(
         self,
         bridge: WapiWrapper,
         log: Logger | LoggerAdapter | None = None,
     ) -> None:
-        self.page = None
-        self.ui_config = None
         self.log = log or w_logger
         self._bridge = bridge
         self._bridge_active: bool = False
         self._handlers: list[Callable[[ActivityEventModel], Any]] = []
-        self._event_queue: asyncio.Queue = asyncio.Queue()
-        self._drain_task: asyncio.Task | None = None
-        self._poll_task: asyncio.Task | None = None
+        self._poll_drain_task: asyncio.Task | None = None
 
     def register_handler(self, callback: Callable[[ActivityEventModel], Any]) -> None:
         if callback not in self._handlers:
@@ -42,34 +54,29 @@ class ActivityApiManager:
             return
 
         await self._bridge.setup_activity_bridge()
-        self._drain_task = asyncio.ensure_future(self._drain_loop())
-        self._poll_task = asyncio.ensure_future(self._poll_loop())
+        self._poll_drain_task = asyncio.ensure_future(self._poll_and_drain_loop())
         self._bridge_active = True
-        self.log.info("ActivityApiManager: DOM bridge active, ready to receive activity events.")
+        self.log.info("ActivityApiManager: bridge active, ready to receive activity events.")
 
-    async def _poll_loop(self) -> None:
+    async def _poll_and_drain_loop(self) -> None:
+        """Single loop: poll the WapiWrapper queue and dispatch events inline.
+
+        Collapses the former separate _poll_loop + _drain_loop into one loop,
+        which means only one JS round-trip per 100 ms cycle instead of two.
+        """
         while True:
             try:
                 events = await self._bridge.poll_activity_queue()
-                for event in events:
-                    await self._event_queue.put(event)
+                for event_data in events:
+                    try:
+                        await self._dispatch_event(event_data)
+                    except Exception as exc:
+                        self.log.error(f"ActivityApiManager: dispatch error: {exc}")
             except asyncio.CancelledError:
                 break
             except Exception as exc:
                 self.log.error(f"ActivityApiManager: poll error: {exc}")
-
-    async def _drain_loop(self) -> None:
-        while True:
-            try:
-                event_data = await self._event_queue.get()
-                try:
-                    await self._dispatch_event(event_data)
-                except Exception as exc:
-                    self.log.error(f"ActivityApiManager: drain loop error: {exc}")
-                finally:
-                    self._event_queue.task_done()
-            except asyncio.CancelledError:
-                break
+            await asyncio.sleep(0.1)
 
     async def _dispatch_event(self, event_data: dict[str, Any]) -> None:
         if not isinstance(event_data, dict):
@@ -80,7 +87,11 @@ class ActivityApiManager:
         for handler in list(self._handlers):
             try:
                 result = handler(event)
-                if asyncio.iscoroutine(result):
+                # Use inspect.iscoroutinefunction (asyncio.iscoroutinefunction is
+                # deprecated and will be removed in Python 3.16 — see PEP 780).
+                if inspect.iscoroutinefunction(handler):
+                    await result  # type: ignore[misc]
+                elif asyncio.iscoroutine(result):
                     await result
             except Exception as exc:
                 self.log.error(
@@ -89,12 +100,19 @@ class ActivityApiManager:
                 )
 
     async def stop_bridge(self) -> None:
-        for task in (self._poll_task, self._drain_task):
-            if task and not task.done():
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
+        """Tear down the bridge and cancel the background task.
+
+        .. warning::
+            All handlers registered via ``register_handler()`` (including those
+            applied with ``@on_activity``) are **cleared** when this method is
+            called.  You must re-apply the decorator (or call
+            ``register_handler()`` again) before starting the bridge again.
+        """
+        if self._poll_drain_task and not self._poll_drain_task.done():
+            self._poll_drain_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._poll_drain_task
         await self._bridge.teardown_activity_bridge()
         self._bridge_active = False
         self._handlers.clear()
-        self.log.info("ActivityApiManager: DOM bridge torn down, all handlers cleared.")
+        self.log.info("ActivityApiManager: bridge torn down, all handlers cleared.")

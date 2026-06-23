@@ -1,5 +1,5 @@
-import asyncio
 import functools
+import inspect
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -14,12 +14,15 @@ def on_activity(
 
     Use this to drive notifications, online badges, typing indicators, and other
     UI feedback from the existing WA-JS presence stream.
+
+    The check uses ``inspect.iscoroutinefunction`` instead of the deprecated
+    ``asyncio.iscoroutinefunction`` (removed in Python 3.16).
     """
 
     def decorator(
         func: Callable[..., Coroutine[Any, Any, Any]],
     ) -> Callable[..., Coroutine[Any, Any, Any]]:
-        if not asyncio.iscoroutinefunction(func):
+        if not inspect.iscoroutinefunction(func):
             raise TypeError(f"@on_activity: '{func.__name__}' must be an async function.")
 
         @functools.wraps(func)
