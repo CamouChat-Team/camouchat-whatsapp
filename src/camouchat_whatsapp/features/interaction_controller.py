@@ -27,8 +27,6 @@ from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_whatsapp.exceptions import WhatsAppInteractionError
 from camouchat_whatsapp.logger import w_logger
 
-# Todo , add logger later
-
 _clipboard_async_lock = asyncio.Lock()
 
 _lock_file_path = os.path.join(tempfile.gettempdir(), "whatsapp_clipboard.lock")

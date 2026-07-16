@@ -12,9 +12,6 @@ from camouchat_whatsapp.api.models import ChatModelAPI
 from camouchat_whatsapp.api.wa_js import WAJS_Scripts, WapiWrapper
 from camouchat_whatsapp.logger import w_logger
 
-# todo , Add Auto logger later
-
-
 class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
     def __init__(
         self,
@@ -29,7 +26,11 @@ class ChatApiManager(ChatProcessorProtocol[ChatModelAPI]):
         self._last_opened_chat_id: str | None = None
 
     async def fetch_chats(self, **kwargs) -> Sequence[ChatModelAPI]:
-        # Todo , add all the params into it & add docstring
+        """Fetch available chats. Accepts all kwargs of get_chat_list:
+        count, direction, only_users, only_groups, only_communities,
+        only_unread, only_archived, only_newsletter, with_labels,
+        anchor_chat_id, ignore_group_metadata.
+        """
         return await self.get_chat_list(**kwargs)
 
     async def open_chat(self, chat: ChatProtocol) -> bool:

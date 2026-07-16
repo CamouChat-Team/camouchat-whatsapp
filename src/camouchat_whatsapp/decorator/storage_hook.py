@@ -2,9 +2,6 @@
 Introduces decorator based storage integration.
 """
 
-# Later after this we will introduce StorageType in the ProfileInfo,
-# as that will help us give more data & flexibility.
-
 import asyncio
 import functools
 import inspect

@@ -26,7 +26,6 @@ class WebSelectorConfig(UiConfigProtocol):
         if self.page is None:
             raise ValueError("page must not be None")
 
-    # Todo , Adding all the new Functions from Child to here.
     def chat_list(self) -> Locator:
         """Returns the chat list grid locator on the main UI."""
         return self.page.get_by_role("grid", name=re.compile("chat list", re.I))
