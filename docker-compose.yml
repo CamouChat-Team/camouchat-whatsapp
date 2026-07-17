@@ -1,0 +1,50 @@
+services:
+  panos-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Override to install from git dev branch instead of PyPI:
+        # PANOS_REF: "git+https://github.com/CamouChat-Team/camouchat-whatsapp@dev"
+        PANOS_REF: "camouchat-whatsapp"
+
+    # Firefox requires at least 256 MB of shared memory to run stably.
+    # The Docker default is 64 MB which causes random tab crashes.
+    shm_size: '2gb'
+
+    volumes:
+      # Named volume — ALL persistence lives here:
+      #   profiles, login session (cookies), encryption keys,
+      #   browser fingerprints, SQLite DB, media, logs.
+      # This volume survives docker compose down/up so you never need to log in again.
+      - panos-data:/data
+
+    env_file:
+      - .env
+
+    environment:
+      # XDG dirs route everything under /data (the named volume).
+      # Must match what's set in the Dockerfile ENV block.
+      XDG_DATA_HOME: /data/share
+      XDG_CACHE_HOME: /data/cache
+      XDG_STATE_HOME: /data/state
+
+    # Expose noVNC port for one-time QR scan (set ENABLE_VNC=1 in .env to activate).
+    # Open http://localhost:8080 in your browser to see the virtual display.
+    ports:
+      - "${VNC_PORT:-8080}:8080"
+
+    restart: unless-stopped
+
+    # Logging — tail with: docker compose logs -f panos-bot
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  # Named volume — data persists across container restarts.
+  # To reset a session: docker compose down -v  (WARNING: deletes login + DB)
+  panos-data:
+    driver: local
