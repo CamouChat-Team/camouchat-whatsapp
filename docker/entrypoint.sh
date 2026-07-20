@@ -1,5 +1,5 @@
 #!/bin/bash
-# entrypoint.sh — PANOS container startup
+# entrypoint.sh — camouchat-whatsapp container startup
 #
 # 1. Copies the Camoufox browser binary from the image layer to /data/cache on first boot.
 # 2. Ensures /data directory structure exists with correct ownership.

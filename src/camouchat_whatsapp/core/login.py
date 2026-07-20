@@ -97,17 +97,17 @@ class Login(LoginProtocol):
             wait_time (int): QR scan timeout in ms (default: 180_000).
             url (str): WhatsApp Web URL.
             number (int | str): Phone number for code-based login.
-                Falls back to env var PANOS_PHONE_NUMBER if omitted.
+                Falls back to env var WA_PHONE_NUMBER if omitted.
             country (str): Country name for phone login.
-                Falls back to env var PANOS_COUNTRY if omitted.
+                Falls back to env var WA_COUNTRY if omitted.
         """
         in_docker = self._is_docker()
 
         number: int | str | None = (
-            kwargs.get("number") or os.getenv("PANOS_PHONE_NUMBER")
+            kwargs.get("number") or os.getenv("WA_PHONE_NUMBER")
         )
         country: str | None = (
-            kwargs.get("country") or os.getenv("PANOS_COUNTRY")
+            kwargs.get("country") or os.getenv("WA_COUNTRY")
         )
         wait_time: int = kwargs.get("wait_time", 180_000)
         link: str = kwargs.get("url", "https://web.whatsapp.com")
@@ -184,7 +184,7 @@ class Login(LoginProtocol):
         """Perform phone number based login with linking code."""
         if not number or not country:
             hint = (
-                " Set PANOS_PHONE_NUMBER and PANOS_COUNTRY env vars."
+                " Set WA_PHONE_NUMBER and WA_COUNTRY env vars."
                 if self._is_docker()
                 else " Pass number= and country= to login()."
             )

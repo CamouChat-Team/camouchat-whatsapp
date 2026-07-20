@@ -1,4 +1,4 @@
-# camouchat-panos — consumer image
+# camouchat-whatsapp — consumer image
 #
 # Builds on top of camouchat-browser-base which already has:
 #   - All Firefox/Camoufox system libs
@@ -7,10 +7,10 @@
 #   - camouchat-core + camouchat-browser installed
 #
 # Build:
-#   docker build -t camouchat-panos:latest .
+#   docker build -t camouchat-whatsapp:latest .
 #
 # Run (use docker-compose.yml instead for full persistence setup):
-#   docker run --shm-size=2gb -v panos-data:/data camouchat-panos:latest
+#   docker run --shm-size=2gb -v whatsapp-data:/data camouchat-whatsapp:latest
 
 FROM camouchat-browser-base:latest
 
@@ -29,9 +29,9 @@ ENV XDG_DATA_HOME=/data/share \
     XDG_CACHE_HOME=/data/cache \
     XDG_STATE_HOME=/data/state
 
-# ── Install camouchat-panos (the PANOS platform plugin) ────────────────────────
-ARG PANOS_REF="camouchat-whatsapp"
-RUN pip install "${PANOS_REF}"
+# ── Install camouchat-whatsapp (the platform plugin) ───────────────────────────
+ARG PLUGIN_REF="camouchat-whatsapp"
+RUN uv pip install --system "${PLUGIN_REF}"
 
 # ── Copy user application code ─────────────────────────────────────────────────
 # Place your bot scripts in an app/ directory next to this Dockerfile.
@@ -58,6 +58,6 @@ WORKDIR /home/app
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["python", "app/main.py"]
 
-LABEL org.opencontainers.image.title="camouchat-panos" \
-      org.opencontainers.image.description="PANOS Web automation plugin for CamouChat, containerized" \
+LABEL org.opencontainers.image.title="camouchat-whatsapp" \
+      org.opencontainers.image.description="WhatsApp Web automation plugin for CamouChat, containerized" \
       org.opencontainers.image.source="https://github.com/CamouChat-Team/camouchat-whatsapp"
