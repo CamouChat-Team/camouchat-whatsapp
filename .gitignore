@@ -45,6 +45,7 @@ src/camouchat_whatsapp/filters/
 .env
 *.env
 .env.*
+!.env.example
 secrets/
 
 # IDEs
