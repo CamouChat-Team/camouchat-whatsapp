@@ -111,7 +111,7 @@ class Query:
 
     async def get_all_message_type(self, msgtype: MessageType | str) -> list[Message]:
         """return all messages with this msgtype"""
-        msg_type_str = msgtype.value if isinstance(msgtype, MessageType) else str(msgtype)
+        msg_type_str = msgtype.value if isinstance(msgtype, MessageType) else msgtype
         async with self.storage._get_session_factory()() as session:
             stmt = select(Message).where(Message.msgtype == msg_type_str)
             result = await session.execute(stmt)

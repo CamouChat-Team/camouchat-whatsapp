@@ -91,21 +91,21 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
     def __init__(
         self,
         page: Page,
+        wapi: WapiSession,
+        profile: ProfileInfo,
         ui_config: WebSelectorConfig | None = None,
         log: Logger | LoggerAdapter | None = None,
-        wapi: WapiSession | None = None,
-        profile: ProfileInfo | None = None,
         **kwargs,
     ):
         if hasattr(self, "_initialized") and self._initialized:
             return
+
         self.page = page
+        self._wapi: WapiSession = wapi
+        self._profile: ProfileInfo = profile
         self.ui_config = ui_config or WebSelectorConfig(page=page)
         self.log = log or w_logger
-        if self.page is None:
-            raise ValueError("page must not be None")
-        self._wapi: WapiSession | None = wapi
-        self._profile: ProfileInfo | None = profile
+
         self._initialized = True
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -151,13 +151,13 @@ class MediaController(MediaControllerProtocol[WebSelectorConfig]):
                 await target.click(timeout=3000)
             chooser: FileChooser = await fc.value
 
-            p_str = str(file.uri)
+            p_str: str = file.uri
             if not await asyncio.to_thread(os.path.exists, p_str) or not await asyncio.to_thread(
                 os.path.isfile, p_str
             ):
                 raise WhatsappMediaError(f"Invalid file path: {file.uri}")
 
-            abs_path = await asyncio.to_thread(os.path.abspath, p_str)
+            abs_path: str = str(await asyncio.to_thread(os.path.abspath, p_str))
             await chooser.set_files(abs_path)
             await self.page.wait_for_timeout(random.uniform(0.7, 1.4))
             if force:

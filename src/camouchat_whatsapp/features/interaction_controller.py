@@ -27,8 +27,6 @@ from camouchat_whatsapp.core.web_ui_config import WebSelectorConfig
 from camouchat_whatsapp.exceptions import WhatsAppInteractionError
 from camouchat_whatsapp.logger import w_logger
 
-# Todo , add logger later
-
 _clipboard_async_lock = asyncio.Lock()
 
 _lock_file_path = os.path.join(tempfile.gettempdir(), "whatsapp_clipboard.lock")
@@ -53,18 +51,18 @@ class InteractionController(InteractionControllerProtocol):
     def __init__(
         self,
         page: Page,
+        wapi: WapiSession,
         ui_config: WebSelectorConfig | None = None,
         log: LoggerAdapter | Logger | None = None,
-        wapi: WapiSession | None = None,
     ) -> None:
         if hasattr(self, "_initialized") and self._initialized:
             return
-        if page is None:
-            raise ValueError("page must not be None")
+
         self.page = page
+        self._wapi: WapiSession = wapi
         self.ui_config = ui_config or WebSelectorConfig(page=page)
         self.log = log or w_logger
-        self._wapi: WapiSession | None = wapi
+
         self._initialized = True
 
     # ----------------------------------------------------
@@ -170,18 +168,23 @@ class InteractionController(InteractionControllerProtocol):
         quote: bool = False,
         send: bool = False,
     ) -> bool:
-        """Reply to a message with optional text."""
+        """Reply to a message with optional text.
+
+        Quote is best-effort — if DOM quoting fails, the plain text is still
+        sent and the method returns False to signal partial success.
+        """
         try:
+            quote_ok = True
             if quote:
-                await self.quote(message)
+                self.log.debug("[send_text] Attempting DOM quote.")
+                quote_ok = await self.quote(message)
+                if not quote_ok:
+                    self.log.warning(
+                        "[send_text] Quote failed — sending plain text without quote context."
+                    )
 
-            text = text or ""
-            success = await self.type_text(
-                text=text,
-                send=send,
-            )
-
-            return success
+            text_ok = await self.type_text(text=text or "", send=send)
+            return text_ok and quote_ok
 
         except PlaywrightTimeoutError as e:
             raise WhatsAppInteractionError("reply timed out while preparing input box") from e
@@ -197,9 +200,9 @@ class InteractionController(InteractionControllerProtocol):
         if not message.id_serialized:
             raise WhatsAppInteractionError("Message or data_id is missing.")
 
-        data_id = str(message.id_serialized)
-        from_me = self._message_from_me(message, data_id)
-        retries = 10
+        data_id = message.id_serialized
+        from_me = self._message_from_me(message)
+        retries = 5
         delay = 1.0
 
         for attempt in range(1, retries + 1):
@@ -224,24 +227,22 @@ class InteractionController(InteractionControllerProtocol):
                 if attempt < retries:
                     await asyncio.sleep(delay)
                 else:
-                    raise WhatsAppInteractionError(
-                        f"side_edge_click failed after {retries} attempts: "
-                        f"'{data_id}' never appeared in DOM."
+                    self.log.warning(
+                        f"[quote] DOM element never appeared after {retries} attempts — '{data_id}'"
                     )
-
-            except WhatsAppInteractionError:
-                raise
+                    return False
 
             except Exception as e:
-                self.log.error(f"[side_edge_click] Error on attempt {attempt}: {e}")
                 if attempt < retries:
                     await asyncio.sleep(delay)
-                else:
-                    raise WhatsAppInteractionError(
-                        f"Unexpected error in side_edge_click: {e}"
-                    ) from e
+                    self.log.debug(f"[quote] Retry {attempt}/{retries} after: {e}")
+                    continue
+                self.log.warning(
+                    f"[quote] DOM interaction failed after {retries} attempts — "
+                    f"degrading gracefully. Last error: {e}"
+                )
 
-        raise WhatsAppInteractionError("side_edge_click failed after max attempts.")
+        return False
 
     async def focus_input(
         self, source: ElementHandle | Locator | None = None, **kwargs
@@ -318,12 +319,19 @@ class InteractionController(InteractionControllerProtocol):
         return value.replace("\\", "\\\\").replace('"', '\\"')
 
     def _message_container_locator(self, data_id: str) -> Locator:
-        """Return the outer WhatsApp message wrapper by data-id only."""
-        base_data_id = "_".join(data_id.split("_")[:3]) if data_id.count("_") >= 2 else data_id
+        """Return the outer WhatsApp message wrapper by data-id or hash."""
+        parts = data_id.split("_")
+        base_data_id = "_".join(parts[:3]) if len(parts) >= 3 else data_id
+        msg_hash = parts[2] if len(parts) >= 3 else data_id
+
         escaped_data_id = self._css_attr_value(data_id)
         escaped_base_data_id = self._css_attr_value(base_data_id)
+        escaped_hash = self._css_attr_value(msg_hash)
 
-        selector = f'div[data-id="{escaped_data_id}"]'
+        # Meta renders different data-id formats depending on chat type (1-1 vs group).
+        # We query the exact serialized ID, the base prefix, AND the raw hex hash.
+        selector = f'div[data-id="{escaped_data_id}"], div[data-id="{escaped_hash}"]'
+
         if base_data_id != data_id:
             selector = f'{selector}, div[data-id^="{escaped_base_data_id}"]'
 
@@ -340,7 +348,7 @@ class InteractionController(InteractionControllerProtocol):
         """Click the non-DOM side padding region of a message row."""
         await message_container.scroll_into_view_if_needed(timeout=3000)
 
-        box = await message_container.bounding_box(timeout=3000)
+        box = await message_container.bounding_box(timeout=5000)
         if not box or not box.get("width") or not box.get("height"):
             return False
 
@@ -360,11 +368,14 @@ class InteractionController(InteractionControllerProtocol):
         )
         return True
 
-    def _message_from_me(self, message: MessageModelAPI, data_id: str) -> bool:
+    def _message_from_me(self, message: MessageModelAPI) -> bool:
         """Resolve message direction, falling back to WhatsApp's data-id prefix."""
-        from_me = getattr(message, "fromMe", None)
-        if from_me is not None:
-            return bool(from_me)
+        if message.fromMe is not None:
+            return message.fromMe
+
+        data_id = message.id_serialized
+        if data_id is None:
+            raise WhatsAppInteractionError("data_id is None")
 
         return data_id.startswith("true_")
 

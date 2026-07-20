@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 import weakref
 from logging import Logger, LoggerAdapter
@@ -49,12 +50,6 @@ class Login(LoginProtocol):
         log: Logger | LoggerAdapter | None = None,
         **kwargs,
     ):
-        if page is None:
-            raise ValueError("page must not be None")
-
-        if profile is None:
-            raise ValueError("profile must not be None")
-
         if hasattr(self, "_initialized") and self._initialized:
             return
 
@@ -82,29 +77,65 @@ class Login(LoginProtocol):
         except PlaywrightTimeoutError as e:
             raise TimeoutError("Timeout while checking for chat list.") from e
 
+    @staticmethod
+    def _is_docker() -> bool:
+        """Return True when running inside a CamouChat Docker container."""
+        return os.getenv("CAMOUCHAT_DOCKER") == "1"
+
     async def login(self, **kwargs) -> bool:
         """
         Authenticate to WhatsApp Web.
 
+        Method is auto-detected from the runtime environment when not supplied:
+        - Docker (CAMOUCHAT_DOCKER=1): phone code login (method=1) is forced.
+          QR is impossible headless — no one can scan the screen.
+        - Bare metal: defaults to phone code (method=1) unless method=0 passed.
+
         kwargs:
-            method: 0 for QR, 1 for phone number (default: 1)
-            wait_time: Timeout for QR scan in ms (default: 180_000)
-            url: WhatsApp Web URL
-            number: Phone number for code-based login
-            country: Country name for phone login
+            method (int): 0 for QR, 1 for phone number.
+                          Omit to let the environment decide.
+            wait_time (int): QR scan timeout in ms (default: 180_000).
+            url (str): WhatsApp Web URL.
+            number (int | str): Phone number for code-based login.
+                Falls back to env var WA_PHONE_NUMBER if omitted.
+            country (str): Country name for phone login.
+                Falls back to env var WA_COUNTRY if omitted.
         """
-        method: int = kwargs.get("method", 1)
+        in_docker = self._is_docker()
+
+        number: int | str | None = (
+            kwargs.get("number") or os.getenv("WA_PHONE_NUMBER")
+        )
+        country: str | None = (
+            kwargs.get("country") or os.getenv("WA_COUNTRY")
+        )
         wait_time: int = kwargs.get("wait_time", 180_000)
         link: str = kwargs.get("url", "https://web.whatsapp.com")
-        number: int | None = kwargs.get("number")
-        country: str | None = kwargs.get("country")
+
+        # Resolve method
+        if "method" not in kwargs:
+            # Docker: QR is impossible headless — always use code login
+            method = 1
+            if in_docker:
+                self.log.info(
+                    "Docker environment detected — using phone code login. "
+                    "Check docker logs for the pairing code."
+                )
+        else:
+            method = int(kwargs["method"])
+            if in_docker and method == 0:
+                self.log.warning(
+                    "method=0 (QR) is not usable in a Docker container "
+                    "(no display to scan). Falling back to phone code login."
+                )
+                method = 1
 
         _max_retries = 3
         for _attempt in range(_max_retries):
             try:
                 await self.page.goto(link, timeout=60_000)
                 await self.page.wait_for_load_state("networkidle", timeout=50_000)
-                break  # success
+                break
             except PlaywrightTimeoutError as e:
                 raise LoginError("Timeout while loading WhatsApp Web") from e
             except PlaywrightError as e:
@@ -123,10 +154,14 @@ class Login(LoginProtocol):
         elif method == 1:
             success = await self.__code_login(number, country)
         else:
-            raise LoginError("Invalid login method. Use method=0 (QR) or method=1 (Code).")
+            raise LoginError(
+                "Invalid login method. Use method=0 (QR) or method=1 (Code)."
+            )
 
         if success:
-            self.log.info("WhatsApp login session stored successfully via persistent context.")
+            self.log.info(
+                "WhatsApp login session stored via persistent context."
+            )
 
         return success
 
@@ -143,10 +178,19 @@ class Login(LoginProtocol):
         except PlaywrightTimeoutError as e:
             raise LoginError("QR login timeout.") from e
 
-    async def __code_login(self, number: int | None, country: str | None) -> bool:
+    async def __code_login(
+        self, number: int | str | None, country: str | None
+    ) -> bool:
         """Perform phone number based login with linking code."""
         if not number or not country:
-            raise LoginError("Both number and country are required for code login.")
+            hint = (
+                " Set WA_PHONE_NUMBER and WA_COUNTRY env vars."
+                if self._is_docker()
+                else " Pass number= and country= to login()."
+            )
+            raise LoginError(
+                "Both number and country are required for code login." + hint
+            )
 
         self.log.info("Starting code-based login...")
 

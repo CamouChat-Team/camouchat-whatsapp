@@ -3,15 +3,23 @@ Here we will be testing the new Msg Event Hook based Architecture Prototyping.
 """
 
 import asyncio
+import logging
 
 from camouchat_browser import (
     BrowserConfig,
     CamoufoxBrowser,
     ProfileManager,
 )
-from camouchat_core import MediaType, Platform
+from camouchat_core import LoggerFactory, MediaType, Platform
 
 from camouchat_whatsapp import FileTyped, Login, MediaController, RegistryConfig
+
+# ── Logger level ────────────────────────────────────────────────────────────
+# Change to logging.DEBUG to see all internal traces (bridge, drain, locator).
+# Options: logging.DEBUG | logging.INFO | logging.WARNING | logging.ERROR
+LOG_LEVEL = logging.DEBUG
+LoggerFactory.set_level(LOG_LEVEL)
+# ─────────────────────────────────────────────────────────────────────────────
 
 _session_msg_ids: list[str] = []
 _session_profile = None
@@ -70,6 +78,10 @@ async def main():
         print(msg, "\n")
 
         print(f"--------------Opening the Chat where msg came from : {msg.jid_From}")
+
+        if msg.jid_From is None:
+            raise ValueError(f"Msg jid_from cannot be none , {msg}")
+
         chat = await wapi.chat_manager.get_chat_by_id(msg.jid_From)  # get chatData
         print("Chat ---")
         print(chat)
@@ -153,13 +165,12 @@ async def main():
         elif plain_body and plain_body.startswith("!echo "):
             print("[*] Command triggered: !echo (Humanized Interaction)")
             echo_text = plain_body.replace("!echo ", "")
-            await interaction.send_text(
+            return await interaction.send_text(  # returns bool status
                 message=msg,
                 text=f"Echo: {echo_text}",  # Type using manual/clipboard
                 quote=True,  # add quote using browser automation
                 send=True,  # send to send text or not.
             )
-            success = True
 
         elif plain_body == "!media":
             print("[*] Command triggered: !media — requesting test image upload")
@@ -253,7 +264,7 @@ if __name__ == "__main__":
             msgs = await query.get_messages_by_ids_async(_session_msg_ids)
             print(f"\n[DB] Retrieved {len(msgs)} messages tracked in this session:")
             for i, m in enumerate(msgs, 1):
-                body = str(m.body)[:50].replace("\n", " ")
+                body = m.body[:50].replace("\n", " ")
                 print(f" {i}. {m.msgtype} | FromMe: {m.fromMe} | Body: {body}...")
 
         try:
